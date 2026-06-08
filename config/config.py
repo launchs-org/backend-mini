@@ -96,9 +96,9 @@ ADMIN_SESSION_KEY = {admin_session_key}
 BRIDGE_TOKEN_SECRET = {bridge_token_secret_key}
 
 GRPC_ADDR = ":9000"
-CUSTOM_SCHEME = "SampleApp"
+CUSTOM_SCHEME = "launchs-org"
 LOGIN_REDIRECT_URL = /ui/
-APP_NAME = "SampleApp"
+APP_NAME = "launchs-org"
 """
     create_env_file("auth.env", auth_env_template)
 

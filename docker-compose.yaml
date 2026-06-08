@@ -1,3 +1,5 @@
+name: launchs-org-backend-mini
+
 services:
   # リバースプロキシ
   nginx:
