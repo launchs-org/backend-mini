@@ -1,0 +1,93 @@
+services:
+  # リバースプロキシ
+  nginx:
+    # イメージ
+    image: nginx:latest
+
+    # ポート
+    ports:
+      - "8443:8443"
+
+    tty: true
+
+    # ディレクトリ共有
+    volumes:
+      # 設定ファイル
+      - ./nginx/configs:/etc/nginx/conf.d/
+
+      # 静的ファイル
+      - ./nginx/statics:/var/www/nginx/statics/:ro
+
+      # SSL証明書
+      - ./nginx/keys:/etc/nginx/ssl:ro
+
+      # ロギングディレクトリ
+      - ./nginx/logs:/var/log/nginx:rw
+
+    # 自動再起動
+    restart: always
+    depends_on:
+      - frontend
+      - app
+  # フロントエンドのコンテナ
+  frontend:
+    # ホスト名設定
+    hostname: frontend
+
+    # イメージ
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: release
+    
+    # ttyを有効化
+    tty: true
+
+    restart: always
+
+  # app コンテナ
+  app:
+    # ホスト名指定
+    hostname: app
+
+    # ビルド対象のdockerfileをしてい
+    build:
+      context: ./app
+      dockerfile: dockerfile
+      target: release
+    
+    # 環境変数
+    env_file:
+      - ./config/app.env
+
+    # 仮想端末を有効化
+    tty: true
+
+    # 自動起動を有効化
+    restart: always
+
+  mysql:
+    # ホスト名
+    hostname: mysql
+
+    # イメージ
+    image: mysql
+
+    # 自走再起動
+    restart: always
+
+    # 環境変数
+    env_file:
+      - ./config/app.env
+
+    # ディレクトリ共有
+    volumes:
+      - mysql_data:/var/lib/mysql
+    
+    # 仮想端末を有効化
+    tty: true
+
+volumes:
+  # mysqlのデータベース
+  mysql_data:
+    driver: local

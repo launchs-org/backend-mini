@@ -1,0 +1,121 @@
+services:
+  # リバースプロキシ
+  nginx:
+    # イメージ
+    image: nginx:latest
+    # ポート
+    ports:
+      - "8955:8443"
+    tty: true
+    # ディレクトリ共有
+    volumes:
+      # 設定ファイル
+      - ./nginx/configs:/etc/nginx/conf.d/
+      # 静的ファイル
+      - ./nginx/statics:/var/www/nginx/statics/:ro
+      # SSL証明書
+      - ./nginx/keys:/etc/nginx/ssl:ro
+      # ロギングディレクトリ
+      - ./nginx/logs:/var/log/nginx:rw
+
+    # 自動再起動
+    restart: always
+    depends_on:
+      - frontend
+      - app
+      - auth
+  
+  auth:
+    hostname: auth
+    image: ghcr.io/mattuu0/authbase/auth:v0.1.6
+    tty: true
+    env_file:
+      - ./openssl/jwtKeys/private.env
+      - ./config/auth.env
+    volumes:
+      - ./auth/icons:/assets/icons
+    restart: always
+    depends_on:
+      # マイグレーションが終わるまで
+      migrate:
+        condition: service_completed_successfully
+    
+    # マイグレーション
+  migrate:
+    image: ghcr.io/mattuu0/authbase/auth:v0.1.6
+    env_file:
+      - ./config/auth.env
+    command: ["/auth","migrate","-r"]
+
+  # フロントエンドのコンテナ
+  frontend:
+    # ホスト名設定
+    hostname: frontend
+    # イメージ
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development-dependencies-env
+    # ディレクトリ共有
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    # ttyを有効化
+    tty: true
+    restart: always
+
+  # app コンテナ
+  app:
+    # ホスト名指定
+    hostname: app
+    # ビルド対象のdockerfileをしてい
+    build:
+      context: ./app
+      dockerfile: dockerfile
+      target: Develop
+    # コードを共有
+    volumes:
+      - ./app/src:/app/src
+    # 環境変数
+    env_file:
+      - ./config/app.env
+    # 仮想端末を有効化
+    tty: true
+    # 自動起動を有効化
+    restart: always
+
+  postgres:
+    hostname: db
+    image: postgres:18-alpine
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: root
+      TZ: Asia/Tokyo
+    volumes:
+      - dbdata:/var/lib/postgresql
+      - ./database/script/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4
+    restart: always
+    ports:
+      - 8080:8080
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@launchs.org
+      - PGADMIN_DEFAULT_PASSWORD=password
+      - PGADMIN_DISABLE_POSTFIX=1
+      - PGADMIN_LISTEN_PORT=8080
+      - PGADMIN_CONFIG_SERVER_MODE=False
+      - PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED=False
+    volumes:
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+
+volumes:
+  # mysqlのデータベース
+  dbdata:
+    driver: local
