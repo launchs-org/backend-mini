@@ -1,6 +1,7 @@
 package main
 
 import (
+	"app/middlewares"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,9 @@ import (
 )
 
 func main() {
+	// ミドルウェア初期化
+	middlewares.Init()
+
 	// Echo instance
 	router := echo.New()
 

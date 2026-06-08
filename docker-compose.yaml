@@ -81,6 +81,7 @@ services:
     # 環境変数
     env_file:
       - ./config/app.env
+      - ./openssl/jwtKeys/public.env
     # 仮想端末を有効化
     tty: true
     # 自動起動を有効化
