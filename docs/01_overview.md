@@ -123,19 +123,19 @@ project.status → deleting
 ## エンティティ関係
 
 ```
-accounts
-  └── projects (account_id FK)
-        ├── deployments (project_id FK)
-        │     ├── deployment_builds (deployment_id FK)
-        │     ├── apply_history (deployment_id FK)
-        │     ├── deployment_webhooks (deployment_id FK)
-        │     ├── services (deployment_id FK, 1:1)
-        │     │     └── ingress_routes (service_id FK, 1:1)
-        │     ├── env_var_mounts (deployment_id FK) ←→ env_vars
-        │     └── volume_mounts (deployment_id FK)  ←→ volumes
-        ├── env_vars (project_id FK)
-        └── volumes (project_id FK)
+
+projects (user_id)
+  ├── deployments (project_id FK)
+  │     ├── deployment_builds (deployment_id FK)
+  │     ├── apply_history (deployment_id FK)
+  │     ├── deployment_webhooks (deployment_id FK)
+  │     ├── services (deployment_id FK, 1:1)
+  │     │     └── ingress_routes (service_id FK, 1:1)
+  │     ├── env_var_mounts (deployment_id FK) ←→ env_vars
+  │     └── volume_mounts (deployment_id FK)  ←→ volumes
+  ├── env_vars (project_id FK)
+  └── volumes (project_id FK)
 
 instance_sizes (グローバルマスター)
-account_quotas (account_id FK, 1:1)
+user_quotas (user_id, 1:1)
 ```

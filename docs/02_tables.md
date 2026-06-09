@@ -24,33 +24,20 @@ type InstanceSize struct {
 
 ---
 
-## accounts
+## user_quotas
+
+認証は別サービスが担当し、このサービスには `user_id`（UUID文字列）だけが渡ってくる。
+`UserID` を主キーとして quota を管理する。レコードが存在しない場合は初回アクセス時に upsert で作成する。
 
 ```go
-type Account struct {
-    ID        string       `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
-    Name      string       `gorm:"type:varchar(255);not null"`
-    Status    string       `gorm:"type:varchar(32);not null;default:'active'"` // active / suspended
-    CreatedAt time.Time
-    UpdatedAt time.Time
-
-    Quota    AccountQuota `gorm:"foreignKey:AccountID"`
-    Projects []Project    `gorm:"foreignKey:AccountID"`
-}
-```
-
----
-
-## account_quotas
-
-```go
-type AccountQuota struct {
+type UserQuota struct {
     ID                       string    `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
-    AccountID                string    `gorm:"type:uuid;not null;uniqueIndex"`
+    UserID                   string    `gorm:"type:varchar(255);not null;uniqueIndex"`
     MaxProjects              int       `gorm:"not null;default:5"`
     MaxDeployments           int       `gorm:"not null;default:20"`
     MaxReplicasPerDeployment int       `gorm:"not null;default:5"`
     MaxVolumeMB              int       `gorm:"not null;default:10240"`
+    CreatedAt                time.Time
     UpdatedAt                time.Time
 }
 ```
@@ -69,9 +56,9 @@ const (
 )
 
 type Project struct {
-    ID        string         `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
-    AccountID string         `gorm:"type:uuid;not null;index"`
-    Name      string         `gorm:"type:varchar(63);not null;uniqueIndex"`
+    ID       string         `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
+    UserID   string         `gorm:"type:varchar(255);not null;index"`
+    Name     string         `gorm:"type:varchar(63);not null;uniqueIndex"`
     Namespace string         `gorm:"type:varchar(63);not null;uniqueIndex"`
     Status    ProjectStatus  `gorm:"type:varchar(32);not null;default:'provisioning'"`
     K8sStatus datatypes.JSON `gorm:"type:jsonb"` // null = 未同期

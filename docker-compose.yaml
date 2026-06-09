@@ -42,7 +42,7 @@ services:
       migrate:
         condition: service_completed_successfully
     
-    # マイグレーション
+  # マイグレーション
   migrate:
     image: ghcr.io/mattuu0/authbase/auth:v0.1.6
     env_file:

@@ -1,121 +1,55 @@
-# ISSUE-006 Account CRUD
+# ISSUE-006 User Quota 取得・更新
 
 ## 親 Issue
 ISSUE-005
 
 ## 概要
-Account の作成・取得と AccountQuota の取得・更新を実装する。
+`user_id` ごとの quota 取得・更新を実装する。
 
-## 実装手順
+認証は別サービスが担当し、JWT から取り出した `user_id`（UUID文字列）だけがこのサービスに渡ってくる。
+Account テーブルは持たず、`user_quotas` テーブルを `user_id` で直接管理する。
+レコードが存在しない場合は初回アクセス時にデフォルト値で upsert する。
 
-### 1. `internal/handler/account.go` を作成
+## レイヤー構成
 
-```go
-package handler
+```
+controller/user_quota_controller.go   ← HTTP ハンドラ
+service/quota_service.go              ← quota チェックロジック
+repository/user_quota_repository.go   ← DB アクセス（GORM）
+model/user_quota.go                   ← UserQuota モデル
+model/project.go                      ← Project モデル（UserID フィールド）
+```
 
-import (
-    "net/http"
-    "github.com/labstack/echo/v4"
-    "github.com/your-org/launchs/internal/model"
-)
+## ルーティング
 
-func (h *Handler) CreateAccount(c echo.Context) error {
-    var req struct {
-        Name string `json:"name" validate:"required"`
-    }
-    if err := c.Bind(&req); err != nil {
-        return echo.ErrBadRequest
-    }
+```
+GET /api/v1/users/:user_id/quota
+PUT /api/v1/users/:user_id/quota
+```
 
-    account := model.Account{Name: req.Name, Status: "active"}
-    if err := h.DB.Create(&account).Error; err != nil {
-        return echo.ErrInternalServerError
-    }
+## レスポンス例
 
-    // quota をデフォルト値で作成
-    quota := model.AccountQuota{
-        AccountID:                account.ID,
-        MaxProjects:              5,
-        MaxDeployments:           20,
-        MaxReplicasPerDeployment: 5,
-        MaxVolumeMB:              10240,
-    }
-    h.DB.Create(&quota)
-
-    return c.JSON(http.StatusCreated, account)
-}
-
-func (h *Handler) GetQuota(c echo.Context) error {
-    accountID := c.Param("id")
-
-    var quota model.AccountQuota
-    if err := h.DB.Where("account_id = ?", accountID).First(&quota).Error; err != nil {
-        return echo.ErrNotFound
-    }
-
-    // 現在の使用量を集計
-    var currentDeployments int64
-    h.DB.Model(&model.Deployment{}).
-        Joins("JOIN projects ON projects.id = deployments.project_id").
-        Where("projects.account_id = ? AND deployments.status != ?", accountID, "deleted").
-        Count(&currentDeployments)
-
-    var currentVolumeMB int64
-    h.DB.Model(&model.Volume{}).
-        Joins("JOIN projects ON projects.id = volumes.project_id").
-        Where("projects.account_id = ? AND volumes.status != ?", accountID, "deleted").
-        Select("COALESCE(SUM(size_mb), 0)").Scan(&currentVolumeMB)
-
-    return c.JSON(http.StatusOK, map[string]interface{}{
-        "max_projects":                quota.MaxProjects,
-        "max_deployments":             quota.MaxDeployments,
-        "max_replicas_per_deployment": quota.MaxReplicasPerDeployment,
-        "max_volume_mb":               quota.MaxVolumeMB,
-        "current_deployments":         currentDeployments,
-        "current_volume_mb":           currentVolumeMB,
-    })
-}
-
-func (h *Handler) UpdateQuota(c echo.Context) error {
-    accountID := c.Param("id")
-    var req struct {
-        MaxProjects              *int `json:"max_projects"`
-        MaxDeployments           *int `json:"max_deployments"`
-        MaxReplicasPerDeployment *int `json:"max_replicas_per_deployment"`
-        MaxVolumeMB              *int `json:"max_volume_mb"`
-    }
-    if err := c.Bind(&req); err != nil {
-        return echo.ErrBadRequest
-    }
-
-    var quota model.AccountQuota
-    if err := h.DB.Where("account_id = ?", accountID).First(&quota).Error; err != nil {
-        return echo.ErrNotFound
-    }
-
-    if req.MaxProjects != nil              { quota.MaxProjects = *req.MaxProjects }
-    if req.MaxDeployments != nil           { quota.MaxDeployments = *req.MaxDeployments }
-    if req.MaxReplicasPerDeployment != nil { quota.MaxReplicasPerDeployment = *req.MaxReplicasPerDeployment }
-    if req.MaxVolumeMB != nil              { quota.MaxVolumeMB = *req.MaxVolumeMB }
-
-    h.DB.Save(&quota)
-    return c.JSON(http.StatusOK, quota)
+```json
+// GET /users/:user_id/quota
+{
+  "user_id": "uuid",
+  "max_projects": 5,
+  "max_deployments": 20,
+  "max_replicas_per_deployment": 5,
+  "max_volume_mb": 10240,
+  "current_projects": 2,
+  "current_deployments": 3,
+  "current_volume_mb": 2048
 }
 ```
 
-### 2. ルーティング登録
-
-`internal/router/router.go` に追加:
-
-```go
-api.POST("/accounts", h.CreateAccount)
-api.GET("/accounts/:id/quota", h.GetQuota)
-api.PUT("/accounts/:id/quota", h.UpdateQuota)
+```json
+// PUT /users/:user_id/quota  (部分更新)
+{ "max_deployments": 30, "max_volume_mb": 20480 }
 ```
 
 ## テスト確認項目
 
-- [ ] `POST /accounts` で Account と AccountQuota が作成されること
-- [ ] `GET /accounts/:id/quota` で使用量も含めて返ること
-- [ ] `PUT /accounts/:id/quota` で部分更新できること
-- [ ] 存在しない account_id で 404 が返ること
+- [ ] `GET /users/:user_id/quota` で quota と現在使用量が返ること
+- [ ] quota レコードが存在しない user_id でも 200 でデフォルト値が返ること（auto-create）
+- [ ] `PUT /users/:user_id/quota` で部分更新できること

@@ -1,49 +1,39 @@
-# ISSUE-050 deployment 作成・更新時の quota チェック
+# ISSUE-050 deployment 作成・更新・apply 時の quota チェック
 
 ## 親 Issue
 ISSUE-049
 
-## 実装手順
+## 概要
+`service/quota_service.go` に quota チェック関数を実装し、各 controller に組み込む。
+`user_id` は Echo コンテキストから `ctx.Get("UserID")` で取得する（`RequireAuth` ミドルウェアがセット済み）。
 
-### `internal/service/quota.go` を完成
+## チェック一覧
 
-```go
-func CheckDeploymentQuota(db *gorm.DB, accountID string) error {
-    var quota model.AccountQuota
-    db.Where("account_id = ?", accountID).First(&quota)
+| チェック関数 | 呼び出し箇所 | エラー時レスポンス |
+|---|---|---|
+| `CheckProjectQuota(userID)` | `POST /projects` | 400 |
+| `CheckDeploymentQuota(userID)` | `POST /projects/:id/deployments` | 400 |
+| `CheckReplicasQuota(userID, replicas)` | `POST /projects/:id/deployments`、`PUT /deployments/:id`（replicas 変更時）、`POST /deployments/:id/apply` | 400 |
+| `CheckVolumeQuota(userID, sizeMB)` | `POST /projects/:id/volumes` | 400 |
 
-    var count int64
-    db.Model(&model.Deployment{}).
-        Joins("JOIN projects ON projects.id = deployments.project_id").
-        Where("projects.account_id = ? AND deployments.status NOT IN ?",
-            accountID, []string{"deleted", "deleting"}).
-        Count(&count)
+## service/quota_service.go の責務
 
-    if int(count) >= quota.MaxDeployments {
-        return fmt.Errorf("deployment quota exceeded: max=%d", quota.MaxDeployments)
-    }
-    return nil
-}
+- `repository.UserQuotaRepository` を通じて `user_quotas` と使用量カウントを取得する
+- quota を超えていた場合は専用の sentinel error を返す（controller 側で 400 に変換）
 
-func CheckReplicasQuota(db *gorm.DB, accountID string, replicas int32) error {
-    var quota model.AccountQuota
-    db.Where("account_id = ?", accountID).First(&quota)
+## エラーレスポンス例
 
-    if int(replicas) > quota.MaxReplicasPerDeployment {
-        return fmt.Errorf("replicas exceed limit: max=%d", quota.MaxReplicasPerDeployment)
-    }
-    return nil
-}
+```json
+{ "error": "project quota exceeded", "code": "PROJECT_QUOTA_EXCEEDED" }
+{ "error": "deployment quota exceeded", "code": "DEPLOYMENT_QUOTA_EXCEEDED" }
+{ "error": "replicas exceed limit", "code": "REPLICAS_QUOTA_EXCEEDED" }
+{ "error": "volume storage quota exceeded", "code": "VOLUME_QUOTA_EXCEEDED" }
 ```
-
-### 各ハンドラーに組み込む
-
-- `CreateDeployment`: `CheckDeploymentQuota` を呼ぶ
-- `UpdateDeployment` で replicas 変更時: `CheckReplicasQuota` を呼ぶ
-- `apply` 時にも replicas の quota チェックを行う
 
 ## テスト確認項目
 
+- [ ] `max_projects` を超える project 作成で 400 になること
 - [ ] `max_deployments` を超える deployment 作成で 400 になること
 - [ ] `max_replicas_per_deployment` を超える replicas 設定で 400 になること
-- [ ] quota 更新後に新しい制限が反映されること
+- [ ] `max_volume_mb` を超える volume 作成で 400 になること
+- [ ] quota 更新後に新しい制限が即時反映されること
