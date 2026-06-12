@@ -5,7 +5,7 @@ ISSUE-026
 
 ## 実装手順
 
-### 1. `internal/handler/volume_mount.go` を作成
+### 1. `handler/volume_mount.go` を作成
 
 ```go
 func (h *Handler) CreateVolumeMount(c echo.Context) error {
@@ -17,7 +17,7 @@ func (h *Handler) CreateVolumeMount(c echo.Context) error {
     if err := c.Bind(&req); err != nil { return echo.ErrBadRequest }
 
     var count int64
-    h.DB.Model(&model.VolumeMount{}).
+    h.DB.Model(&models.VolumeMount{}).
         Where("volume_id = ? AND deployment_id = ?", req.VolumeID, deploymentID).
         Count(&count)
     if count > 0 {
@@ -26,18 +26,18 @@ func (h *Handler) CreateVolumeMount(c echo.Context) error {
         })
     }
 
-    mount := model.VolumeMount{
+    mount := models.VolumeMount{
         VolumeID:     req.VolumeID,
         DeploymentID: deploymentID,
         MountPath:    req.MountPath,
-        Status:       model.VolumeMountStatusPending,
+        Status:       models.VolumeMountStatusPending,
     }
     h.DB.Create(&mount)
     return c.JSON(http.StatusCreated, mount)
 }
 
 func (h *Handler) UpdateVolumeMount(c echo.Context) error {
-    var mount model.VolumeMount
+    var mount models.VolumeMount
     if err := h.DB.First(&mount, "id = ?", c.Param("id")).Error; err != nil {
         return echo.ErrNotFound
     }

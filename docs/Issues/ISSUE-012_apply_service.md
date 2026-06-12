@@ -8,7 +8,7 @@ apply のコアロジックを実装する。SELECT FOR UPDATE によるロッ�
 
 ## 実装手順
 
-### 1. `internal/service/apply.go` を作成
+### 1. `service/apply.go` を作成
 
 ```go
 package service
@@ -19,9 +19,9 @@ import (
     "fmt"
     "time"
 
-    "github.com/your-org/launchs/internal/k8s"
-    "github.com/your-org/launchs/internal/k8s/manifest"
-    "github.com/your-org/launchs/internal/model"
+    "app/k8s"
+    "app/k8s/manifest"
+    "app/models"
     "gorm.io/gorm"
     k8sclient "k8s.io/client-go/kubernetes"
 )
@@ -43,14 +43,14 @@ func (s *ApplyService) Apply(ctx context.Context, deploymentID string) (*ApplyRe
 
     err := s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
         // 1. SELECT FOR UPDATE でロック取得
-        var d model.Deployment
+        var d models.Deployment
         if err := tx.Set("gorm:query_option", "FOR UPDATE").
             First(&d, "id = ?", deploymentID).Error; err != nil {
             return fmt.Errorf("deployment not found: %w", err)
         }
 
         // 2. Project 取得（namespace のため）
-        var project model.Project
+        var project models.Project
         if err := tx.First(&project, "id = ?", d.ProjectID).Error; err != nil {
             return fmt.Errorf("project not found: %w", err)
         }
@@ -73,7 +73,7 @@ func (s *ApplyService) Apply(ctx context.Context, deploymentID string) (*ApplyRe
 
         // 5. manifest 生成
         // instance_size マスターを取得
-        var size model.InstanceSize
+        var size models.InstanceSize
         tx.First(&size, "size = ?", instanceSize)
 
         dForManifest := d
@@ -85,23 +85,23 @@ func (s *ApplyService) Apply(ctx context.Context, deploymentID string) (*ApplyRe
         if len(dForManifest.Args) == 0 { dForManifest.Args = d.Args }
 
         gen := &manifest.Generator{
-            InstanceSizes: map[string]model.InstanceSize{instanceSize: size},
+            InstanceSizes: map[string]models.InstanceSize{instanceSize: size},
         }
         depManifest := gen.GenerateDeployment(dForManifest, project.Namespace, imageURL, nil, nil)
 
         // 6. apply_history INSERT
         manifestJSON, _ := json.Marshal(depManifest)
-        history := model.ApplyHistory{
+        history := models.ApplyHistory{
             DeploymentID: deploymentID,
             Manifests:    manifestJSON,
-            Status:       model.ApplyStatusApplied,
+            Status:       models.ApplyStatusApplied,
             AppliedAt:    time.Now(),
         }
         tx.Create(&history)
 
         // 7. k8s apply
         if err := k8s.ApplyDeployment(ctx, s.K8s, depManifest); err != nil {
-            history.Status = model.ApplyStatusFailed
+            history.Status = models.ApplyStatusFailed
             history.ErrorMessage = err.Error()
             tx.Save(&history)
             return fmt.Errorf("k8s apply: %w", err)
@@ -130,8 +130,8 @@ func (s *ApplyService) Apply(ctx context.Context, deploymentID string) (*ApplyRe
             "pending_command":         nil,
             "args":                    dForManifest.Args,
             "pending_args":            nil,
-            "status":                  model.DeploymentStatusRunning,
-            "app_status":              model.AppStatusDeploying,
+            "status":                  models.DeploymentStatusRunning,
+            "app_status":              models.AppStatusDeploying,
             "applied_at":              &now,
         }
         tx.Model(&d).Updates(updates)

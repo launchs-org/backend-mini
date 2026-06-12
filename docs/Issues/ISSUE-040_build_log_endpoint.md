@@ -5,12 +5,12 @@ ISSUE-035
 
 ## 実装手順
 
-### `internal/handler/build.go` を作成
+### `handler/build.go` を作成
 
 ```go
 func (h *Handler) ListBuilds(c echo.Context) error {
     deploymentID := c.Param("id")
-    var builds []model.DeploymentBuild
+    var builds []models.DeploymentBuild
     h.DB.Where("deployment_id = ?", deploymentID).
         Order("created_at DESC").Find(&builds)
     return c.JSON(http.StatusOK, builds)
@@ -18,7 +18,7 @@ func (h *Handler) ListBuilds(c echo.Context) error {
 
 func (h *Handler) GetBuildLog(c echo.Context) error {
     buildID := c.Param("build_id")
-    var build model.DeploymentBuild
+    var build models.DeploymentBuild
     if err := h.DB.First(&build, "id = ?", buildID).Error; err != nil {
         return echo.ErrNotFound
     }

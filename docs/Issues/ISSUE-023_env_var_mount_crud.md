@@ -9,14 +9,14 @@ override_key の設定と pending_override_key への書き込みを行う。
 
 ## 実装手順
 
-### 1. `internal/handler/env_var_mount.go` を作成
+### 1. `handler/env_var_mount.go` を作成
 
 ```go
 package handler
 
 func (h *Handler) ListEnvMounts(c echo.Context) error {
     deploymentID := c.Param("id")
-    var mounts []model.EnvVarMount
+    var mounts []models.EnvVarMount
     h.DB.Preload("EnvVar").
         Where("deployment_id = ? AND status != ?", deploymentID, "deleting").
         Find(&mounts)
@@ -35,7 +35,7 @@ func (h *Handler) CreateEnvMount(c echo.Context) error {
 
     // 重複チェック
     var count int64
-    h.DB.Model(&model.EnvVarMount{}).
+    h.DB.Model(&models.EnvVarMount{}).
         Where("env_var_id = ? AND deployment_id = ?", req.EnvVarID, deploymentID).
         Count(&count)
     if count > 0 {
@@ -48,18 +48,18 @@ func (h *Handler) CreateEnvMount(c echo.Context) error {
     overrideKey := ""
     if req.OverrideKey != nil { overrideKey = *req.OverrideKey }
 
-    mount := model.EnvVarMount{
+    mount := models.EnvVarMount{
         EnvVarID:     req.EnvVarID,
         DeploymentID: deploymentID,
         OverrideKey:  overrideKey,
-        Status:       model.EnvVarMountStatusPending,
+        Status:       models.EnvVarMountStatusPending,
     }
     h.DB.Create(&mount)
     return c.JSON(http.StatusCreated, mount)
 }
 
 func (h *Handler) UpdateEnvMount(c echo.Context) error {
-    var mount model.EnvVarMount
+    var mount models.EnvVarMount
     if err := h.DB.First(&mount, "id = ?", c.Param("id")).Error; err != nil {
         return echo.ErrNotFound
     }
@@ -77,11 +77,11 @@ func (h *Handler) UpdateEnvMount(c echo.Context) error {
 }
 
 func (h *Handler) DeleteEnvMount(c echo.Context) error {
-    var mount model.EnvVarMount
+    var mount models.EnvVarMount
     if err := h.DB.First(&mount, "id = ?", c.Param("id")).Error; err != nil {
         return echo.ErrNotFound
     }
-    h.DB.Model(&mount).Update("status", model.EnvVarMountStatusDeleting)
+    h.DB.Model(&mount).Update("status", models.EnvVarMountStatusDeleting)
     return c.NoContent(http.StatusNoContent)
 }
 ```

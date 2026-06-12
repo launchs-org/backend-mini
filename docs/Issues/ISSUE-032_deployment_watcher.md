@@ -17,10 +17,10 @@ package main
 import (
     "context"
     "log"
-    "github.com/your-org/launchs/internal/config"
-    "github.com/your-org/launchs/internal/db"
-    "github.com/your-org/launchs/internal/k8s"
-    "github.com/your-org/launchs/internal/watcher"
+    "app/config"
+    "app/repository"
+    "app/k8s"
+    "app/watcher"
 )
 
 func main() {
@@ -40,7 +40,7 @@ func main() {
 }
 ```
 
-### 2. `internal/watcher/deployment.go` を作成
+### 2. `watcher/deployment.go` を作成
 
 ```go
 package watcher
@@ -53,7 +53,7 @@ import (
     "k8s.io/apimachinery/pkg/watch"
     "k8s.io/client-go/kubernetes"
     "gorm.io/gorm"
-    "github.com/your-org/launchs/internal/model"
+    "app/models"
 )
 
 func WatchDeployments(ctx context.Context, db *gorm.DB, client *kubernetes.Clientset) {
@@ -83,17 +83,17 @@ func WatchDeployments(ctx context.Context, db *gorm.DB, client *kubernetes.Clien
                 // Pod が全て Ready → app_status = running
                 if dep.Status.ReadyReplicas > 0 &&
                     dep.Status.ReadyReplicas == dep.Status.Replicas {
-                    updates["app_status"] = model.AppStatusRunning
-                    updates["status"] = model.DeploymentStatusRunning
+                    updates["app_status"] = models.AppStatusRunning
+                    updates["status"] = models.DeploymentStatusRunning
                 }
-                db.Model(&model.Deployment{}).
+                db.Model(&models.Deployment{}).
                     Where("id = ?", deploymentID).
                     Updates(updates)
 
             case watch.Deleted:
-                db.Model(&model.Deployment{}).
+                db.Model(&models.Deployment{}).
                     Where("id = ?", deploymentID).
-                    Update("status", model.DeploymentStatusFailed)
+                    Update("status", models.DeploymentStatusFailed)
             }
         }
 

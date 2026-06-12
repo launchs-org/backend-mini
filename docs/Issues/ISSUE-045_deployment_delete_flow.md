@@ -5,17 +5,17 @@ ISSUE-044
 
 ## 実装手順
 
-### `internal/service/delete.go` を作成
+### `service/delete.go` を作成
 
 ```go
 package service
 
 func DeleteDeploymentResources(ctx context.Context, db *gorm.DB, k8sClient *kubernetes.Clientset, dc dynamic.Interface, deploymentID string) error {
-    var d model.Deployment
+    var d models.Deployment
     if err := db.Preload("Service").First(&d, "id = ?", deploymentID).Error; err != nil {
         return err
     }
-    var project model.Project
+    var project models.Project
     db.First(&project, "id = ?", d.ProjectID)
 
     // k8s リソースを削除
@@ -26,10 +26,10 @@ func DeleteDeploymentResources(ctx context.Context, db *gorm.DB, k8sClient *kube
     k8s.DeleteSecret(ctx, k8sClient, project.Namespace, d.Name+"-secret")
 
     // volume_mounts / env_var_mounts も deleting に
-    db.Model(&model.VolumeMount{}).
+    db.Model(&models.VolumeMount{}).
         Where("deployment_id = ?", deploymentID).
         Update("status", "deleting")
-    db.Model(&model.EnvVarMount{}).
+    db.Model(&models.EnvVarMount{}).
         Where("deployment_id = ?", deploymentID).
         Update("status", "deleting")
 
@@ -44,12 +44,12 @@ func DeleteDeploymentResources(ctx context.Context, db *gorm.DB, k8sClient *kube
 // watcher/deployment.go の Deleted イベント処理を拡張
 case watch.Deleted:
     // 関連レコードを全て削除
-    db.Where("deployment_id = ?", deploymentID).Delete(&model.EnvVarMount{})
-    db.Where("deployment_id = ?", deploymentID).Delete(&model.VolumeMount{})
-    db.Where("deployment_id = ?", deploymentID).Delete(&model.ApplyHistory{})
-    db.Where("deployment_id = ?", deploymentID).Delete(&model.DeploymentBuild{})
+    db.Where("deployment_id = ?", deploymentID).Delete(&models.EnvVarMount{})
+    db.Where("deployment_id = ?", deploymentID).Delete(&models.VolumeMount{})
+    db.Where("deployment_id = ?", deploymentID).Delete(&models.ApplyHistory{})
+    db.Where("deployment_id = ?", deploymentID).Delete(&models.DeploymentBuild{})
     // service / ingress は cascade で削除されるか別途処理
-    db.Delete(&model.Deployment{}, "id = ?", deploymentID)
+    db.Delete(&models.Deployment{}, "id = ?", deploymentID)
 ```
 
 ## テスト確認項目

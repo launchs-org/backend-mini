@@ -5,11 +5,11 @@ ISSUE-026
 
 ## 実装手順
 
-### `internal/service/apply.go` に追加
+### `service/apply.go` に追加
 
 ```go
 // volume_mounts を取得して PVC apply と Deployment volumeMounts を設定
-var volMounts []model.VolumeMount
+var volMounts []models.VolumeMount
 tx.Preload("Volume").
     Where("deployment_id = ? AND status != ?", deploymentID, "deleting").
     Find(&volMounts)
@@ -24,7 +24,7 @@ for _, vm := range volMounts {
     tx.Model(&vm).Updates(map[string]interface{}{
         "mount_path":         mountPath,
         "pending_mount_path": "",
-        "status":             model.VolumeMountStatusMounted,
+        "status":             models.VolumeMountStatusMounted,
     })
 }
 

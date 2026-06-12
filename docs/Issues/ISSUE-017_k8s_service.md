@@ -8,7 +8,7 @@ k8s Service の manifest を生成し、apply する。
 
 ## 実装手順
 
-### 1. `internal/k8s/service.go` を作成
+### 1. `k8s/service.go` を作成
 
 ```go
 package k8s

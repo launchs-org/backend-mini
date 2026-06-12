@@ -8,7 +8,7 @@ apply 履歴の一覧・詳細取得エンドポイントを実装する。
 
 ## 実装手順
 
-### 1. `internal/handler/apply_history.go` を作成
+### 1. `handler/apply_history.go` を作成
 
 ```go
 package handler
@@ -16,12 +16,12 @@ package handler
 import (
     "net/http"
     "github.com/labstack/echo/v4"
-    "github.com/your-org/launchs/internal/model"
+    "app/models"
 )
 
 func (h *Handler) ListApplyHistory(c echo.Context) error {
     deploymentID := c.Param("id")
-    var histories []model.ApplyHistory
+    var histories []models.ApplyHistory
     h.DB.Where("deployment_id = ?", deploymentID).
         Order("applied_at DESC").
         Find(&histories)
@@ -29,7 +29,7 @@ func (h *Handler) ListApplyHistory(c echo.Context) error {
 }
 
 func (h *Handler) GetApplyHistory(c echo.Context) error {
-    var history model.ApplyHistory
+    var history models.ApplyHistory
     if err := h.DB.First(&history,
         "id = ? AND deployment_id = ?",
         c.Param("history_id"), c.Param("id"),

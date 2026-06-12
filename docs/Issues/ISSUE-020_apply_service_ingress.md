@@ -8,13 +8,13 @@ ISSUE-012 の apply サービスを拡張し、Service と IngressRoute も k8s 
 
 ## 実装手順
 
-### `internal/service/apply.go` に追加
+### `service/apply.go` に追加
 
 ```go
 // Service の apply（apply.go の k8s apply セクションに追加）
 
 // Service の pending_ports を取得
-var svcModel model.Service
+var svcModel models.Service
 tx.Where("deployment_id = ?", deploymentID).First(&svcModel)
 
 ports := svcModel.PendingPorts
@@ -28,12 +28,12 @@ if ports != nil {
     tx.Model(&svcModel).Updates(map[string]interface{}{
         "ports":         ports,
         "pending_ports": nil,
-        "status":        model.ServiceStatusActive,
+        "status":        models.ServiceStatusActive,
     })
 }
 
 // IngressRoute の apply
-var ingressModel model.IngressRoute
+var ingressModel models.IngressRoute
 if err := tx.Where("service_id = ?", svcModel.ID).First(&ingressModel).Error; err == nil {
     k8s.ApplyIngressRoute(
         ctx, s.DynamicClient,
@@ -41,7 +41,7 @@ if err := tx.Where("service_id = ?", svcModel.ID).First(&ingressModel).Error; er
         ingressModel.Host, ingressModel.PathPrefix,
         d.Name, ingressModel.Port,
     )
-    tx.Model(&ingressModel).Update("status", model.IngressRouteStatusActive)
+    tx.Model(&ingressModel).Update("status", models.IngressRouteStatusActive)
 }
 ```
 

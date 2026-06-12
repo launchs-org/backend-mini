@@ -9,7 +9,7 @@ is_secret=false → ConfigMap、is_secret=true → Secret に振り分ける。
 
 ## 実装手順
 
-### 1. `internal/k8s/configmap.go` を作成
+### 1. `k8s/configmap.go` を作成
 
 ```go
 package k8s
@@ -37,7 +37,7 @@ func ApplyConfigMap(ctx context.Context, client *kubernetes.Clientset, namespace
 }
 ```
 
-### 2. `internal/k8s/secret.go` を作成
+### 2. `k8s/secret.go` を作成
 
 ```go
 package k8s
@@ -58,8 +58,8 @@ func ApplySecret(ctx context.Context, client *kubernetes.Clientset, namespace, n
 ### 3. env_var_mounts から ConfigMap/Secret データを構築するヘルパー
 
 ```go
-// internal/service/apply.go に追加
-func buildEnvData(mounts []model.EnvVarMount) (configData map[string]string, secretData map[string]string) {
+// service/apply.go に追加
+func buildEnvData(mounts []models.EnvVarMount) (configData map[string]string, secretData map[string]string) {
     configData = map[string]string{}
     secretData = map[string]string{}
     for _, m := range mounts {

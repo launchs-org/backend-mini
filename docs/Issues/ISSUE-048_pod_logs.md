@@ -5,7 +5,7 @@ ISSUE-047
 
 ## 実装手順
 
-### `internal/handler/log.go` を作成
+### `handler/log.go` を作成
 
 ```go
 package handler
@@ -21,11 +21,11 @@ import (
 func (h *Handler) GetPodLogs(c echo.Context) error {
     deploymentID := c.Param("id")
 
-    var d model.Deployment
+    var d models.Deployment
     if err := h.DB.First(&d, "id = ?", deploymentID).Error; err != nil {
         return echo.ErrNotFound
     }
-    var project model.Project
+    var project models.Project
     h.DB.First(&project, "id = ?", d.ProjectID)
 
     // Pod を deployment name のラベルで特定

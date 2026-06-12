@@ -8,7 +8,7 @@ Project の作成・取得・更新・削除を実装する。作成時に k8s n
 
 ## 実装手順
 
-### 1. `internal/service/project.go` を作成
+### 1. `service/project.go` を作成
 
 ```go
 package service
@@ -16,8 +16,8 @@ package service
 import (
     "context"
     "fmt"
-    "github.com/your-org/launchs/internal/k8s"
-    "github.com/your-org/launchs/internal/model"
+    "app/k8s"
+    "app/models"
     "gorm.io/gorm"
     k8sclient "k8s.io/client-go/kubernetes"
 )
@@ -27,15 +27,15 @@ type ProjectService struct {
     K8s *k8sclient.Clientset
 }
 
-func (s *ProjectService) Create(ctx context.Context, accountID, name string) (*model.Project, error) {
+func (s *ProjectService) Create(ctx context.Context, accountID, name string) (*models.Project, error) {
     // namespace 名 = project 名（lowercase）
     namespace := name
 
-    project := model.Project{
+    project := models.Project{
         AccountID: accountID,
         Name:      name,
         Namespace: namespace,
-        Status:    model.ProjectStatusProvisioning,
+        Status:    models.ProjectStatusProvisioning,
     }
 
     if err := s.DB.Create(&project).Error; err != nil {
@@ -49,24 +49,24 @@ func (s *ProjectService) Create(ctx context.Context, accountID, name string) (*m
     }
 
     // namespace 作成成功 → active に更新
-    s.DB.Model(&project).Update("status", model.ProjectStatusActive)
-    project.Status = model.ProjectStatusActive
+    s.DB.Model(&project).Update("status", models.ProjectStatusActive)
+    project.Status = models.ProjectStatusActive
 
     return &project, nil
 }
 
 func (s *ProjectService) Delete(ctx context.Context, id string) error {
-    var project model.Project
+    var project models.Project
     if err := s.DB.First(&project, "id = ?", id).Error; err != nil {
         return err
     }
 
     // deleting に更新（実際の削除は Phase10 で完成）
-    return s.DB.Model(&project).Update("status", model.ProjectStatusDeleting).Error
+    return s.DB.Model(&project).Update("status", models.ProjectStatusDeleting).Error
 }
 ```
 
-### 2. `internal/handler/project.go` を作成
+### 2. `handler/project.go` を作成
 
 ```go
 package handler
@@ -74,12 +74,12 @@ package handler
 import (
     "net/http"
     "github.com/labstack/echo/v4"
-    "github.com/your-org/launchs/internal/model"
-    "github.com/your-org/launchs/internal/service"
+    "app/models"
+    "app/service"
 )
 
 func (h *Handler) ListProjects(c echo.Context) error {
-    var projects []model.Project
+    var projects []models.Project
     h.DB.Find(&projects)
     return c.JSON(http.StatusOK, projects)
 }
@@ -102,7 +102,7 @@ func (h *Handler) CreateProject(c echo.Context) error {
 }
 
 func (h *Handler) GetProject(c echo.Context) error {
-    var project model.Project
+    var project models.Project
     if err := h.DB.First(&project, "id = ?", c.Param("id")).Error; err != nil {
         return echo.ErrNotFound
     }
@@ -110,7 +110,7 @@ func (h *Handler) GetProject(c echo.Context) error {
 }
 
 func (h *Handler) UpdateProject(c echo.Context) error {
-    var project model.Project
+    var project models.Project
     if err := h.DB.First(&project, "id = ?", c.Param("id")).Error; err != nil {
         return echo.ErrNotFound
     }

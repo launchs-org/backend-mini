@@ -10,7 +10,7 @@ ISSUE-001
 
 ### 1. Handler に渡す依存性をまとめる構造体を作成
 
-`internal/handler/handler.go`
+`handler/handler.go`
 
 ```go
 package handler
@@ -19,7 +19,7 @@ import (
     "gorm.io/gorm"
     "k8s.io/client-go/dynamic"
     "k8s.io/client-go/kubernetes"
-    "github.com/your-org/launchs/internal/config"
+    "app/config"
 )
 
 type Handler struct {
@@ -39,7 +39,7 @@ func New(db *gorm.DB, k8s *kubernetes.Clientset, dc dynamic.Interface, cfg *conf
 }
 ```
 
-### 2. `internal/router/router.go` を作成
+### 2. `router/router.go` を作成
 
 ```go
 package router
@@ -47,7 +47,7 @@ package router
 import (
     "github.com/labstack/echo/v4"
     "github.com/labstack/echo/v4/middleware"
-    "github.com/your-org/launchs/internal/handler"
+    "app/handler"
 )
 
 func New(h *handler.Handler) *echo.Echo {
@@ -64,18 +64,18 @@ func New(h *handler.Handler) *echo.Echo {
 }
 ```
 
-### 3. `cmd/api/main.go` を整理
+### 3. `main.go` を整理
 
 ```go
 package main
 
 import (
     "log"
-    "github.com/your-org/launchs/internal/config"
-    "github.com/your-org/launchs/internal/db"
-    "github.com/your-org/launchs/internal/handler"
-    "github.com/your-org/launchs/internal/k8s"
-    "github.com/your-org/launchs/internal/router"
+    "app/config"
+    "app/repository"
+    "app/handler"
+    "app/k8s"
+    "app/router"
 )
 
 func main() {

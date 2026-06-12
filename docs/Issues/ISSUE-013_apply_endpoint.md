@@ -8,20 +8,20 @@ apply サービスを呼び出す HTTP エンドポイントを実装する。
 
 ## 実装手順
 
-### 1. `internal/handler/deployment.go` に追加
+### 1. `handler/deployment.go` に追加
 
 ```go
 func (h *Handler) ApplyDeployment(c echo.Context) error {
     deploymentID := c.Param("id")
 
     // deployment の存在確認
-    var d model.Deployment
+    var d models.Deployment
     if err := h.DB.First(&d, "id = ?", deploymentID).Error; err != nil {
         return echo.ErrNotFound
     }
 
     // deleting 中は apply 不可
-    if d.Status == model.DeploymentStatusDeleting {
+    if d.Status == models.DeploymentStatusDeleting {
         return c.JSON(http.StatusConflict, map[string]string{
             "error": "deployment is being deleted",
             "code":  "DEPLOYMENT_DELETING",
@@ -29,9 +29,9 @@ func (h *Handler) ApplyDeployment(c echo.Context) error {
     }
 
     // instance_sizes をロード
-    var sizes []model.InstanceSize
+    var sizes []models.InstanceSize
     h.DB.Find(&sizes)
-    sizeMap := make(map[string]model.InstanceSize)
+    sizeMap := make(map[string]models.InstanceSize)
     for _, s := range sizes {
         sizeMap[s.Size] = s
     }

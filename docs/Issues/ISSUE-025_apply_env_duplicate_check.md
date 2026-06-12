@@ -9,11 +9,11 @@ apply 後に env_var_mounts.status を applied に更新する。
 
 ## 実装手順
 
-### `internal/service/apply.go` に追加
+### `service/apply.go` に追加
 
 ```go
 // 1. env_var 実効キーの重複チェック
-var mounts []model.EnvVarMount
+var mounts []models.EnvVarMount
 tx.Preload("EnvVar").
     Where("deployment_id = ? AND status != ?", deploymentID, "deleting").
     Find(&mounts)
@@ -43,9 +43,9 @@ if len(secretData) > 0 {
 // ConfigMap/Secret の envFrom を Deployment spec に追加する
 
 // 4. apply 後に env_var_mounts.status = applied に更新
-tx.Model(&model.EnvVarMount{}).
-    Where("deployment_id = ? AND status = ?", deploymentID, model.EnvVarMountStatusPending).
-    Update("status", model.EnvVarMountStatusApplied)
+tx.Model(&models.EnvVarMount{}).
+    Where("deployment_id = ? AND status = ?", deploymentID, models.EnvVarMountStatusPending).
+    Update("status", models.EnvVarMountStatusApplied)
 ```
 
 ## テスト確認項目

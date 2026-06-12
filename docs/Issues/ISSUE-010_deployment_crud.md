@@ -9,7 +9,7 @@ POST・PUT ではリクエストのフィールドを `pending_***` カラムに
 
 ## 実装手順
 
-### 1. `internal/handler/deployment.go` を作成
+### 1. `handler/deployment.go` を作成
 
 #### POST /projects/:id/deployments
 
@@ -43,12 +43,12 @@ func (h *Handler) CreateDeployment(c echo.Context) error {
     if req.DockerfilePath == "" { req.DockerfilePath = "./Dockerfile" }
     if req.GithubRepoDirectory == "" { req.GithubRepoDirectory = "./" }
 
-    d := model.Deployment{
+    d := models.Deployment{
         ProjectID: projectID,
         Name:      req.Name,
-        Type:      model.DeploymentType(req.Type),
-        Status:    model.DeploymentStatusPending,
-        AppStatus: model.AppStatusPending,
+        Type:      models.DeploymentType(req.Type),
+        Status:    models.DeploymentStatusPending,
+        AppStatus: models.AppStatusPending,
         // 全て pending_*** に入れる
         PendingImageURL:             req.ImageURL,
         PendingGithubRepoURL:        req.GithubRepoURL,
@@ -65,9 +65,9 @@ func (h *Handler) CreateDeployment(c echo.Context) error {
     }
 
     // Service レコードも同時に作成（ports は空）
-    svc := model.Service{
+    svc := models.Service{
         DeploymentID: d.ID,
-        Status:       model.ServiceStatusPending,
+        Status:       models.ServiceStatusPending,
     }
     h.DB.Create(&svc)
 
@@ -79,7 +79,7 @@ func (h *Handler) CreateDeployment(c echo.Context) error {
 
 ```go
 func (h *Handler) UpdateDeployment(c echo.Context) error {
-    var d model.Deployment
+    var d models.Deployment
     if err := h.DB.First(&d, "id = ?", c.Param("id")).Error; err != nil {
         return echo.ErrNotFound
     }
