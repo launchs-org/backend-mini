@@ -4,6 +4,8 @@ import (
 	"app/k8s"
 	"app/middlewares"
 	"app/repository"
+	"app/config"
+	"app/router"
 	"context"
 	"errors"
 	"log"
@@ -11,21 +13,19 @@ import (
 	"net/http"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 )
 
 func main() {
-	// ミドルウェア初期化
+	// 設定を初期化する
+	cfg := config.NewEnvConfig()
+
+	// ミドルウェア初期化（JWT公開鍵の読み込み）
 	middlewares.Init()
 
-	// リポジトリ初期化
+	// データベース初期化・マイグレーション
 	err := repository.Init()
-
-	// エラー処理
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("データベースの初期化に失敗しました: %v", err) // DB 初期化失敗時はアプリを終了する
 	}
 
 	// k8s クライアント初期化
@@ -35,7 +35,7 @@ func main() {
 	}
 
 	// dynamic クライアント初期化（Traefik CRD 用）
-	_, err = k8s.NewDynamicClient()
+	dynamicClient, err := k8s.NewDynamicClient()
 	if err != nil {
 		log.Fatalf("dynamic クライアントの作成に失敗しました: %v", err) // dynamic クライアント作成失敗時にエラーを出す
 	}
@@ -47,23 +47,13 @@ func main() {
 	}
 	log.Printf("k8s に接続しました: %d 個の namespace が見つかりました", len(namespaceList.Items)) // 接続確認ログを出す
 
-	// Echo instance
-	router := echo.New()
+	// Phase 2 以降: 各ハンドラをここで初期化してルーターに渡す
+	// projectHandler := handler.NewProjectHandler(service.NewProjectService(repository.Database, k8sClient, dynamicClient))
+	_ = dynamicClient // 将来のハンドラ初期化まで未使用警告を抑制する
 
-	// Middleware
-	router.Use(middleware.Logger())
-	router.Use(middleware.Recover())
-
-	// Routes
-	router.GET("/", hello)
-
-	// Start server
-	if err := router.Start(":8080"); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		slog.Error("failed to start server", "error", err)
+	// ルーターを生成してサーバーを起動する
+	echoRouter := router.New()
+	if err := echoRouter.Start(":" + cfg.GetServerPort()); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		slog.Error("サーバーの起動に失敗しました", "error", err) // サーバー起動失敗時にエラーログを出す
 	}
-}
-
-// Handler
-func hello(ctx echo.Context) error {
-	return ctx.String(http.StatusOK, "Hello, World!")
 }
