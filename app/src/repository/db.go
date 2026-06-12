@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"app/logger"
 	"app/models"
 	"fmt"
 	"os"
@@ -15,6 +16,9 @@ var (
 )
 
 func Init() error {
+	// ログを出す
+	logger.Println("データベースを初期化します")
+
 	// パスワードなどを埋め込む
 	dsn := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=Asia/Tokyo",
@@ -35,6 +39,21 @@ func Init() error {
 
 	// データベースを格納
 	Database = db
+
+	// ログを出す
+	logger.Println("データベースに接続しました")
+	logger.Println("マイグレーションを実行します")
+
+	// 自動マイグレーション
+	err = AutoMigrate()
+
+	// エラー処理
+	if err != nil {
+		return err
+	}
+
+	// ログを出す
+	logger.Println("マイグレーションを実行しました")
 
 	return nil
 }
