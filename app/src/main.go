@@ -2,7 +2,9 @@ package main
 
 import (
 	"app/middlewares"
+	"app/repository"
 	"errors"
+	"log"
 	"log/slog"
 	"net/http"
 
@@ -13,6 +15,14 @@ import (
 func main() {
 	// ミドルウェア初期化
 	middlewares.Init()
+
+	// リポジトリ初期化
+	err := repository.Init()
+
+	// エラー処理
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Echo instance
 	router := echo.New()
