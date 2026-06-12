@@ -255,17 +255,74 @@ logger.PrintErr("エラーが発生しました")   // エラーログ
 
 ---
 
-## テスト確認
+## 実行環境
 
-実装完了後、Issue の「テスト確認項目」セクションにあるチェックリストを必ず確認する。
-チェックリストを達成できているか、API を実際に呼び出して確認すること。
+アプリケーションは Docker Compose で動作している。コマンドを実行する際は必ず以下の形式を使う。
+
+```bash
+docker compose exec app {コマンド}
+```
+
+例：
+```bash
+docker compose exec app go build ./...         # ビルド確認
+docker compose exec app go test ./...          # テスト実行
+docker compose exec app go vet ./...           # 静的解析
+```
+
+---
+
+## テスト実装と確認
+
+### テストの実装
+
+実装完了後、Issue の「テスト確認項目」を元に Go のテストコードを実装する。
+テストファイルは実装ファイルと同じパッケージに `_test.go` サフィックスで作成する。
 
 ```
-## テスト確認項目
-- [ ] POST /api/deployments でデプロイメントが作成される
-- [ ] status = "pending" で作成される
-- [ ] project_id が存在しない場合は 404 を返す
+app/src/
+├── handler/
+│   ├── deployment.go
+│   └── deployment_test.go   # ハンドラーのテスト
+├── service/
+│   ├── deployment.go
+│   └── deployment_test.go   # サービスのテスト
 ```
+
+テストコードもコーディング規約（1文字変数禁止・日本語コメント）に従う。
+
+```go
+func TestCreateDeployment(t *testing.T) {
+    // テストケースを定義する
+    testCases := []struct {
+        name           string
+        requestBody    CreateDeploymentRequest
+        expectedStatus int
+    }{
+        {
+            name:           "正常にデプロイメントが作成される",       // 正常系のテストケース
+            requestBody:    CreateDeploymentRequest{Name: "test"}, // リクエストボディを設定する
+            expectedStatus: http.StatusCreated,                    // 期待するステータスコード
+        },
+    }
+
+    for _, testCase := range testCases {
+        t.Run(testCase.name, func(t *testing.T) {
+            // テスト処理を記述する
+        })
+    }
+}
+```
+
+### テストの実行と確認
+
+テスト実装後、Docker 経由で実行して全件パスすることを確認する。
+
+```bash
+docker compose exec app go test ./...
+```
+
+Issue の「テスト確認項目」チェックリストをすべてテストコードでカバーできているか確認する。
 
 ---
 
