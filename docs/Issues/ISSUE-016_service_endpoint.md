@@ -8,7 +8,7 @@ Service の取得・更新エンドポイントを実装する。PUT では `por
 
 ## 実装手順
 
-### 1. `internal/handler/service.go` を作成
+### 1. `handler/service.go` を作成
 
 ```go
 package handler
@@ -16,14 +16,14 @@ package handler
 import (
     "net/http"
     "github.com/labstack/echo/v4"
-    "github.com/your-org/launchs/internal/model"
+    "app/models"
     "gorm.io/datatypes"
     "encoding/json"
 )
 
 func (h *Handler) GetService(c echo.Context) error {
     deploymentID := c.Param("id")
-    var svc model.Service
+    var svc models.Service
     if err := h.DB.Where("deployment_id = ?", deploymentID).First(&svc).Error; err != nil {
         return echo.ErrNotFound
     }
@@ -32,7 +32,7 @@ func (h *Handler) GetService(c echo.Context) error {
 
 func (h *Handler) UpdateService(c echo.Context) error {
     deploymentID := c.Param("id")
-    var svc model.Service
+    var svc models.Service
     if err := h.DB.Where("deployment_id = ?", deploymentID).First(&svc).Error; err != nil {
         return echo.ErrNotFound
     }

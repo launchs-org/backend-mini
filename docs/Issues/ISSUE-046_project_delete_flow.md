@@ -5,31 +5,31 @@ ISSUE-044
 
 ## 実装手順
 
-### `internal/service/project.go` の Delete メソッドを完成
+### `service/project.go` の Delete メソッドを完成
 
 ```go
 func (s *ProjectService) Delete(ctx context.Context, id string) error {
-    var project model.Project
+    var project models.Project
     if err := s.DB.First(&project, "id = ?", id).Error; err != nil {
         return err
     }
 
     // project を deleting に
-    s.DB.Model(&project).Update("status", model.ProjectStatusDeleting)
+    s.DB.Model(&project).Update("status", models.ProjectStatusDeleting)
 
     // 配下の全 deployment を deleting に
-    var deployments []model.Deployment
+    var deployments []models.Deployment
     s.DB.Where("project_id = ?", id).Find(&deployments)
 
     for _, d := range deployments {
-        s.DB.Model(&d).Update("status", model.DeploymentStatusDeleting)
+        s.DB.Model(&d).Update("status", models.DeploymentStatusDeleting)
         // k8s リソースを削除
         DeleteDeploymentResources(ctx, s.DB, s.K8s, s.DynamicClient, d.ID)
     }
 
     // env_vars / volumes を deleting に
-    s.DB.Model(&model.EnvVar{}).Where("project_id = ?", id).Update("status", "deleting")
-    s.DB.Model(&model.Volume{}).Where("project_id = ?", id).Update("status", "deleting")
+    s.DB.Model(&models.EnvVar{}).Where("project_id = ?", id).Update("status", "deleting")
+    s.DB.Model(&models.Volume{}).Where("project_id = ?", id).Update("status", "deleting")
 
     // 全リソース削除完了を監視する goroutine を起動
     go s.waitAndDeleteNamespace(ctx, id, project.Namespace)
@@ -42,7 +42,7 @@ func (s *ProjectService) waitAndDeleteNamespace(ctx context.Context, projectID, 
         time.Sleep(5 * time.Second)
 
         var count int64
-        s.DB.Model(&model.Deployment{}).
+        s.DB.Model(&models.Deployment{}).
             Where("project_id = ? AND status != ?", projectID, "deleted").
             Count(&count)
 

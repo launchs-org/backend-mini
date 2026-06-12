@@ -8,13 +8,13 @@ DB の値から k8s Deployment / ConfigMap / Secret manifest を生成し、k8s 
 
 ## 実装手順
 
-### 1. `internal/k8s/manifest/generator.go` を作成
+### 1. `k8s/manifest/generator.go` を作成
 
 ```go
 package manifest
 
 import (
-    "github.com/your-org/launchs/internal/model"
+    "app/models"
     appsv1 "k8s.io/api/apps/v1"
     corev1 "k8s.io/api/core/v1"
     "k8s.io/apimachinery/pkg/api/resource"
@@ -22,16 +22,16 @@ import (
 )
 
 type Generator struct {
-    InstanceSizes map[string]model.InstanceSize
+    InstanceSizes map[string]models.InstanceSize
 }
 
 // GenerateDeployment: Deployment manifest を生成
 func (g *Generator) GenerateDeployment(
-    d model.Deployment,
+    d models.Deployment,
     namespace string,
     imageURL string,
-    envMounts []model.EnvVarMount,
-    volumeMounts []model.VolumeMount,
+    envMounts []models.EnvVarMount,
+    volumeMounts []models.VolumeMount,
 ) *appsv1.Deployment {
 
     size := g.InstanceSizes[d.InstanceSize]
@@ -87,7 +87,7 @@ func (g *Generator) GenerateDeployment(
 }
 ```
 
-### 2. `internal/k8s/deployment.go` を作成
+### 2. `k8s/deployment.go` を作成
 
 ```go
 package k8s

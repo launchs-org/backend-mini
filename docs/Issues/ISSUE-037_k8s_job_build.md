@@ -8,7 +8,7 @@ ISSUE-035
 
 ## 実装手順
 
-### 1. `internal/k8s/job.go` を作成
+### 1. `k8s/job.go` を作成
 
 ```go
 package k8s

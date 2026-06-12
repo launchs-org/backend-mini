@@ -8,17 +8,17 @@ Volume の作成・取得・削除を実装する。作成時に quota チェッ
 
 ## 実装手順
 
-### 1. `internal/service/quota.go` を作成（volume quota チェック）
+### 1. `service/quota.go` を作成（volume quota チェック）
 
 ```go
 package service
 
 func CheckVolumeQuota(db *gorm.DB, accountID string, newSizeMB int) error {
-    var quota model.AccountQuota
+    var quota models.AccountQuota
     db.Where("account_id = ?", accountID).First(&quota)
 
     var currentMB int64
-    db.Model(&model.Volume{}).
+    db.Model(&models.Volume{}).
         Joins("JOIN projects ON projects.id = volumes.project_id").
         Where("projects.account_id = ? AND volumes.status != ?", accountID, "deleted").
         Select("COALESCE(SUM(size_mb), 0)").Scan(&currentMB)
@@ -31,7 +31,7 @@ func CheckVolumeQuota(db *gorm.DB, accountID string, newSizeMB int) error {
 }
 ```
 
-### 2. `internal/handler/volume.go` を作成
+### 2. `handler/volume.go` を作成
 
 ```go
 func (h *Handler) CreateVolume(c echo.Context) error {
@@ -48,7 +48,7 @@ func (h *Handler) CreateVolume(c echo.Context) error {
     }
 
     // project から account_id を取得して quota チェック
-    var project model.Project
+    var project models.Project
     h.DB.First(&project, "id = ?", projectID)
     if err := service.CheckVolumeQuota(h.DB, project.AccountID, req.SizeMB); err != nil {
         return c.JSON(http.StatusBadRequest, map[string]string{
@@ -56,30 +56,30 @@ func (h *Handler) CreateVolume(c echo.Context) error {
         })
     }
 
-    vol := model.Volume{
+    vol := models.Volume{
         ProjectID: projectID,
         Name:      req.Name,
         SizeMB:    req.SizeMB,
-        Status:    model.VolumeStatusPending,
+        Status:    models.VolumeStatusPending,
     }
     h.DB.Create(&vol)
     return c.JSON(http.StatusCreated, vol)
 }
 
 func (h *Handler) DeleteVolume(c echo.Context) error {
-    var vol model.Volume
+    var vol models.Volume
     if err := h.DB.First(&vol, "id = ?", c.Param("id")).Error; err != nil {
         return echo.ErrNotFound
     }
     // mount されている場合は削除不可
     var count int64
-    h.DB.Model(&model.VolumeMount{}).Where("volume_id = ?", vol.ID).Count(&count)
+    h.DB.Model(&models.VolumeMount{}).Where("volume_id = ?", vol.ID).Count(&count)
     if count > 0 {
         return c.JSON(http.StatusConflict, map[string]string{
             "error": "volume is mounted", "code": "VOLUME_MOUNTED",
         })
     }
-    h.DB.Model(&vol).Update("status", model.VolumeStatusDeleting)
+    h.DB.Model(&vol).Update("status", models.VolumeStatusDeleting)
     return c.NoContent(http.StatusNoContent)
 }
 ```

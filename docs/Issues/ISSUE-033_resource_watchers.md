@@ -9,7 +9,7 @@ PVC が削除されたら DB レコードも削除する。
 
 ## 実装手順
 
-### `internal/watcher/service.go`
+### `watcher/service.go`
 
 ```go
 func WatchServices(ctx context.Context, db *gorm.DB, client *kubernetes.Clientset) {
@@ -19,7 +19,7 @@ func WatchServices(ctx context.Context, db *gorm.DB, client *kubernetes.Clientse
 }
 ```
 
-### `internal/watcher/pvc.go`
+### `watcher/pvc.go`
 
 ```go
 func WatchPVCs(ctx context.Context, db *gorm.DB, client *kubernetes.Clientset) {

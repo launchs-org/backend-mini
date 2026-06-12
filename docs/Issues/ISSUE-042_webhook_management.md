@@ -5,14 +5,14 @@ ISSUE-041
 
 ## 実装手順
 
-### `internal/handler/webhook.go` を作成
+### `handler/webhook.go` を作成
 
 ```go
 func (h *Handler) CreateWebhook(c echo.Context) error {
     deploymentID := c.Param("id")
 
     // 既に存在する場合は 409
-    var existing model.DeploymentWebhook
+    var existing models.DeploymentWebhook
     if err := h.DB.Where("deployment_id = ?", deploymentID).First(&existing).Error; err == nil {
         return c.JSON(http.StatusConflict, map[string]string{"error": "webhook already exists"})
     }
@@ -22,7 +22,7 @@ func (h *Handler) CreateWebhook(c echo.Context) error {
     rand.Read(secretBytes)
     secret := "whsec_" + hex.EncodeToString(secretBytes)
 
-    webhook := model.DeploymentWebhook{
+    webhook := models.DeploymentWebhook{
         DeploymentID: deploymentID,
         Secret:       secret,
     }

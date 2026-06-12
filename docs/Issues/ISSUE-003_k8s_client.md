@@ -16,7 +16,7 @@ go get k8s.io/api@latest
 go get k8s.io/apimachinery@latest
 ```
 
-### 2. `internal/k8s/client.go` を作成
+### 2. `k8s/client.go` を作成
 
 ```go
 package k8s
@@ -47,7 +47,7 @@ go get k8s.io/client-go/dynamic
 ```
 
 ```go
-// internal/k8s/client.go に追加
+// k8s/client.go に追加
 import "k8s.io/client-go/dynamic"
 
 func NewDynamicClient() (dynamic.Interface, error) {
@@ -60,7 +60,7 @@ func NewDynamicClient() (dynamic.Interface, error) {
 }
 ```
 
-### 4. `cmd/api/main.go` に k8s クライアント初期化を追加
+### 4. `main.go` に k8s クライアント初期化を追加
 
 ```go
 k8sClient, err := k8s.NewClient()

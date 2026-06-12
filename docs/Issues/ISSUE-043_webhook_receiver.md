@@ -5,12 +5,12 @@ ISSUE-041
 
 ## 実装手順
 
-### `internal/service/webhook.go` を作成
+### `service/webhook.go` を作成
 
 ```go
 func HandleGithubPush(ctx context.Context, db *gorm.DB, deploymentID, signature string, body []byte) error {
     // 1. Webhook シークレット取得
-    var webhook model.DeploymentWebhook
+    var webhook models.DeploymentWebhook
     if err := db.Where("deployment_id = ?", deploymentID).First(&webhook).Error; err != nil {
         return fmt.Errorf("webhook not found")
     }
@@ -36,7 +36,7 @@ func HandleGithubPush(ctx context.Context, db *gorm.DB, deploymentID, signature 
     pushedBranch := strings.TrimPrefix(payload.Ref, "refs/heads/")
 
     // 4. deployment の github_branch と一致するか確認
-    var d model.Deployment
+    var d models.Deployment
     db.First(&d, "id = ?", deploymentID)
     if d.GithubBranch != pushedBranch {
         return nil // スキップ

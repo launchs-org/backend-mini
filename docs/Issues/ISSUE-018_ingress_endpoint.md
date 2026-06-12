@@ -18,20 +18,20 @@ func generateHost(deploymentName string) string {
 }
 ```
 
-### 2. `internal/handler/ingress.go` を作成
+### 2. `handler/ingress.go` を作成
 
 ```go
 func (h *Handler) CreateIngress(c echo.Context) error {
     deploymentID := c.Param("id")
 
     // deployment 取得
-    var d model.Deployment
+    var d models.Deployment
     if err := h.DB.First(&d, "id = ?", deploymentID).Error; err != nil {
         return echo.ErrNotFound
     }
 
     // service 取得
-    var svc model.Service
+    var svc models.Service
     if err := h.DB.Where("deployment_id = ?", deploymentID).First(&svc).Error; err != nil {
         return c.JSON(http.StatusBadRequest, map[string]string{
             "error": "service not found", "code": "SERVICE_NOT_FOUND",
@@ -39,7 +39,7 @@ func (h *Handler) CreateIngress(c echo.Context) error {
     }
 
     // 既に IngressRoute が存在する場合は 409
-    var existing model.IngressRoute
+    var existing models.IngressRoute
     if err := h.DB.Where("service_id = ?", svc.ID).First(&existing).Error; err == nil {
         return c.JSON(http.StatusConflict, map[string]string{
             "error": "ingress already exists", "code": "INGRESS_EXISTS",
@@ -56,12 +56,12 @@ func (h *Handler) CreateIngress(c echo.Context) error {
     // port が service.ports の TCP ポートに存在するか確認
     // （バリデーションロジックは省略）
 
-    ingress := model.IngressRoute{
+    ingress := models.IngressRoute{
         ServiceID:  svc.ID,
         Host:       generateHost(d.Name),
         PathPrefix: "/",
         Port:       req.Port,
-        Status:     model.IngressRouteStatusPending,
+        Status:     models.IngressRouteStatusPending,
     }
     h.DB.Create(&ingress)
     return c.JSON(http.StatusCreated, ingress)
@@ -69,9 +69,9 @@ func (h *Handler) CreateIngress(c echo.Context) error {
 
 func (h *Handler) GetIngress(c echo.Context) error {
     deploymentID := c.Param("id")
-    var svc model.Service
+    var svc models.Service
     h.DB.Where("deployment_id = ?", deploymentID).First(&svc)
-    var ingress model.IngressRoute
+    var ingress models.IngressRoute
     if err := h.DB.Where("service_id = ?", svc.ID).First(&ingress).Error; err != nil {
         return echo.ErrNotFound
     }

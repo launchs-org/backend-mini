@@ -5,7 +5,7 @@ ISSUE-026
 
 ## 実装手順
 
-### `internal/k8s/pvc.go` を作成
+### `k8s/pvc.go` を作成
 
 ```go
 package k8s

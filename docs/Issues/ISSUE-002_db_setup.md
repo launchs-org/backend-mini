@@ -18,7 +18,7 @@ go get github.com/lib/pq
 go get github.com/google/uuid
 ```
 
-### 2. `internal/config/config.go` を作成
+### 2. `config/config.go` を作成
 
 ```go
 package config
@@ -51,7 +51,7 @@ func getEnv(key, fallback string) string {
 
 ### 3. 全モデルを作成
 
-`internal/model/` 以下に各ファイルを作成する。
+`models/` 以下に各ファイルを作成する。
 モデルの詳細は設計書 `02_tables.md` を参照。
 
 作成するファイル:
@@ -74,13 +74,13 @@ func getEnv(key, fallback string) string {
 - `ID` は `uuid` 型、`default:gen_random_uuid()`
 - `CreatedAt` / `UpdatedAt` は `time.Time`（GORM が自動管理）
 
-### 4. `internal/db/db.go` を作成
+### 4. `repository/db.go` を作成
 
 ```go
-package db
+package repository
 
 import (
-    "github.com/your-org/launchs/internal/model"
+    "app/models"
     "gorm.io/driver/postgres"
     "gorm.io/gorm"
 )
@@ -95,25 +95,25 @@ func New(dsn string) (*gorm.DB, error) {
 
 func AutoMigrate(db *gorm.DB) error {
     return db.AutoMigrate(
-        &model.InstanceSize{},
-        &model.Account{},
-        &model.AccountQuota{},
-        &model.Project{},
-        &model.Deployment{},
-        &model.DeploymentBuild{},
-        &model.ApplyHistory{},
-        &model.Service{},
-        &model.IngressRoute{},
-        &model.EnvVar{},
-        &model.EnvVarMount{},
-        &model.Volume{},
-        &model.VolumeMount{},
-        &model.DeploymentWebhook{},
+        &models.InstanceSize{},
+        &models.Account{},
+        &models.AccountQuota{},
+        &models.Project{},
+        &models.Deployment{},
+        &models.DeploymentBuild{},
+        &models.ApplyHistory{},
+        &models.Service{},
+        &models.IngressRoute{},
+        &models.EnvVar{},
+        &models.EnvVarMount{},
+        &models.Volume{},
+        &models.VolumeMount{},
+        &models.DeploymentWebhook{},
     )
 }
 
 func SeedInstanceSizes(db *gorm.DB) error {
-    sizes := []model.InstanceSize{
+    sizes := []models.InstanceSize{
         {Size: "micro",  CPURequest: "50m",   CPULimit: "200m",  MemoryRequest: "64Mi",   MemoryLimit: "128Mi"},
         {Size: "small",  CPURequest: "100m",  CPULimit: "500m",  MemoryRequest: "128Mi",  MemoryLimit: "256Mi"},
         {Size: "medium", CPURequest: "250m",  CPULimit: "1000m", MemoryRequest: "256Mi",  MemoryLimit: "512Mi"},
@@ -124,7 +124,7 @@ func SeedInstanceSizes(db *gorm.DB) error {
 }
 ```
 
-### 5. `cmd/api/main.go` に DB 初期化を追加
+### 5. `main.go` に DB 初期化を追加
 
 ```go
 cfg := config.Load()
@@ -145,7 +145,7 @@ if err := db.SeedInstanceSizes(database); err != nil {
 
 ## テスト確認項目
 
-- [ ] `go run ./cmd/api` でエラーなく起動すること
+- [ ] `go run .` でエラーなく起動すること
 - [ ] PostgreSQL に接続できること
 - [ ] 全テーブルが作成されること（`\dt` で確認）
 - [ ] `instance_sizes` に5件のマスターデータが入っていること

@@ -9,14 +9,14 @@ is_secret=true の場合 GET で value を "***" にマスクする。
 
 ## 実装手順
 
-### 1. `internal/handler/env_var.go` を作成
+### 1. `handler/env_var.go` を作成
 
 ```go
 package handler
 
 func (h *Handler) ListEnvVars(c echo.Context) error {
     projectID := c.Param("id")
-    var vars []model.EnvVar
+    var vars []models.EnvVar
     h.DB.Where("project_id = ? AND status != ?", projectID, "deleted").Find(&vars)
 
     // is_secret=true の value をマスク
@@ -50,7 +50,7 @@ func (h *Handler) CreateEnvVar(c echo.Context) error {
         }
     }
 
-    ev := model.EnvVar{
+    ev := models.EnvVar{
         ProjectID: projectID,
         Key:       req.Key,
         Value:     req.Value,
@@ -62,7 +62,7 @@ func (h *Handler) CreateEnvVar(c echo.Context) error {
 }
 
 func (h *Handler) UpdateEnvVar(c echo.Context) error {
-    var ev model.EnvVar
+    var ev models.EnvVar
     if err := h.DB.First(&ev, "id = ?", c.Param("id")).Error; err != nil {
         return echo.ErrNotFound
     }
@@ -80,13 +80,13 @@ func (h *Handler) UpdateEnvVar(c echo.Context) error {
 }
 
 func (h *Handler) DeleteEnvVar(c echo.Context) error {
-    var ev model.EnvVar
+    var ev models.EnvVar
     if err := h.DB.First(&ev, "id = ?", c.Param("id")).Error; err != nil {
         return echo.ErrNotFound
     }
     // mount されている場合は削除不可
     var count int64
-    h.DB.Model(&model.EnvVarMount{}).Where("env_var_id = ?", ev.ID).Count(&count)
+    h.DB.Model(&models.EnvVarMount{}).Where("env_var_id = ?", ev.ID).Count(&count)
     if count > 0 {
         return c.JSON(http.StatusConflict, map[string]string{
             "error": "env_var is mounted to deployments",

@@ -8,7 +8,7 @@ apply 時にビルドが必要かどうかを判定し、commit_sha が HEAD の
 
 ## 実装手順
 
-### 1. `internal/service/apply.go` に追加
+### 1. `service/apply.go` に追加
 
 ```go
 // HEAD SHA 解決
@@ -32,8 +32,8 @@ func resolveCommitSHA(ctx context.Context, repoURL, branch, sha string) (string,
 }
 
 // ビルド要否判定
-func needsBuild(d model.Deployment) bool {
-    if d.Type == model.DeploymentTypeImageURL { return false }
+func needsBuild(d models.Deployment) bool {
+    if d.Type == models.DeploymentTypeImageURL { return false }
 
     return d.PendingGithubRepoURL != d.GithubRepoURL ||
         d.PendingGithubBranch != d.GithubBranch ||

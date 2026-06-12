@@ -8,7 +8,7 @@ Traefik の IngressRoute CRD を dynamic client で apply する。
 
 ## 実装手順
 
-### 1. `internal/k8s/ingress.go` を作成
+### 1. `k8s/ingress.go` を作成
 
 Traefik IngressRoute は CRD なので `dynamic.Interface` を使う。
 
