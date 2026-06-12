@@ -128,15 +128,18 @@ def main():
 
     # app.env のテンプレート
     app_env_template = f"""
-DB_TYPE = postgres
-DB_DSN = host=db user=main password=main dbname=maindb port=5432 sslmode=disable TimeZone=Asia/Tokyo
+DB_HOST = db
+DB_USER = main
+DB_PASSWORD = main
+DB_NAME = maindb
+DB_PORT = 5432
 """
 
     # app.env ファイルを生成
     create_env_file("app.env", app_env_template)
 
     # auth.env ファイルを生成
-    create_auth_env("postgres", "host=db user=main password=main dbname=maindb port=5432 sslmode=disable TimeZone=Asia/Tokyo")
+    create_auth_env("postgres", "host=db user=main password=main dbname=authdb port=5432 sslmode=disable TimeZone=Asia/Tokyo")
 
     print(f"\n--- 設定完了！ ---")
     print(f"設定ファイルがすべて './data' ディレクトリに生成されました。")
