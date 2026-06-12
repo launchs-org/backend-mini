@@ -319,7 +319,7 @@ func TestCreateDeployment(t *testing.T) {
 テスト実装後、Docker 経由で実行して全件パスすることを確認する。
 
 ```bash
-docker compose exec app go test ./...
+task test-all
 ```
 
 Issue の「テスト確認項目」チェックリストをすべてテストコードでカバーできているか確認する。
