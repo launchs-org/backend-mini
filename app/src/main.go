@@ -1,11 +1,13 @@
 package main
 
 import (
+	"app/config"
+	"app/handler"
 	"app/k8s"
 	"app/middlewares"
 	"app/repository"
-	"app/config"
 	"app/router"
+	"app/service"
 	"context"
 	"errors"
 	"log"
@@ -47,12 +49,17 @@ func main() {
 	}
 	log.Printf("k8s に接続しました: %d 個の namespace が見つかりました", len(namespaceList.Items)) // 接続確認ログを出す
 
-	// Phase 2 以降: 各ハンドラをここで初期化してルーターに渡す
-	// projectHandler := handler.NewProjectHandler(service.NewProjectService(repository.Database, k8sClient, dynamicClient))
 	_ = dynamicClient // 将来のハンドラ初期化まで未使用警告を抑制する
 
+	// quota ハンドラーを DI 組み立てする
+	userQuotaRepo := repository.NewUserQuotaRepository(repository.Database)       // quota リポジトリを生成する
+	quotaServiceImpl := service.NewQuotaService(userQuotaRepo)                    // quota サービスを生成する
+	userQuotaHandler := handler.NewUserQuotaHandler(quotaServiceImpl)             // quota ハンドラーを生成する
+
 	// ルーターを生成してサーバーを起動する
-	echoRouter := router.New()
+	echoRouter := router.New(router.RouterOptions{
+		UserQuotaHandler: userQuotaHandler, // quota ハンドラーを注入する
+	})
 	if err := echoRouter.Start(":" + cfg.GetServerPort()); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		slog.Error("サーバーの起動に失敗しました", "error", err) // サーバー起動失敗時にエラーログを出す
 	}

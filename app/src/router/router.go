@@ -1,14 +1,20 @@
 package router
 
 import (
+	"app/handler"
 	"app/middlewares"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
 
+// RouterOptions はルーター生成に必要なハンドラーをまとめた構造体
+type RouterOptions struct {
+	UserQuotaHandler *handler.UserQuotaHandler // quota ハンドラー
+}
+
 // New はミドルウェアとルーティングを設定した Echo インスタンスを返す
-func New() *echo.Echo {
+func New(opts RouterOptions) *echo.Echo {
 	router := echo.New() // Echo インスタンスを生成する
 
 	router.Use(middleware.Logger())  // リクエストログミドルウェアを設定する
@@ -17,9 +23,9 @@ func New() *echo.Echo {
 	// 認証必須の API グループを作成する
 	apiGroup := router.Group("/api/v1", middlewares.RequireAuth)
 
-	// Phase 2 以降で各ハンドラを main.go で初期化してここに登録する
-	// apiGroup.GET("/projects", projectHandler.ListProjects)
-	_ = apiGroup // 将来のルート追加まで未使用警告を抑制する
+	// quota エンドポイントを登録する
+	apiGroup.GET("/users/quota", opts.UserQuotaHandler.GetQuota)    // quota 取得エンドポイント
+	apiGroup.PUT("/users/quota", opts.UserQuotaHandler.UpdateQuota) // quota 更新エンドポイント
 
 	return router
 }
