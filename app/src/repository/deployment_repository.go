@@ -71,7 +71,9 @@ func (repo *deploymentRepositoryImpl) Updates(ctx context.Context, tx *gorm.DB, 
 
 // ServiceRepository は services テーブルへのアクセスを定義するインターフェース
 type ServiceRepository interface {
-	Create(ctx context.Context, service *models.Service) error // service を作成する
+	Create(ctx context.Context, service *models.Service) error                          // service を作成する
+	FindByDeploymentID(ctx context.Context, deploymentID string) (*models.Service, error) // deploymentID に紐づく service を取得する
+	Update(ctx context.Context, service *models.Service) error                          // service を更新する
 }
 
 // serviceRepositoryImpl は ServiceRepository の GORM 実装
@@ -87,4 +89,18 @@ func NewServiceRepository(db *gorm.DB) ServiceRepository {
 // Create は service レコードを作成する
 func (repo *serviceRepositoryImpl) Create(ctx context.Context, service *models.Service) error {
 	return repo.db.WithContext(ctx).Create(service).Error // db を使って作成する
+}
+
+// FindByDeploymentID は deploymentID に対応する service を返す
+func (repo *serviceRepositoryImpl) FindByDeploymentID(ctx context.Context, deploymentID string) (*models.Service, error) {
+	var serviceData models.Service                                                                                          // service を格納する変数を定義する
+	if err := repo.db.WithContext(ctx).First(&serviceData, "deployment_id = ?", deploymentID).Error; err != nil { // db から service を取得する
+		return nil, err // 取得エラーを返す
+	}
+	return &serviceData, nil // service を返す
+}
+
+// Update は service レコードを保存する
+func (repo *serviceRepositoryImpl) Update(ctx context.Context, service *models.Service) error {
+	return repo.db.WithContext(ctx).Save(service).Error // db を使って保存する
 }

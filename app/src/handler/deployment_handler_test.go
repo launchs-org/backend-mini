@@ -23,6 +23,8 @@ type mockDeploymentService struct {
 	getDeploymentFunc    func(ctx context.Context, userID string, deploymentID string) (*models.Deployment, error)
 	updateDeploymentFunc func(ctx context.Context, userID string, deploymentID string, req service.UpdateDeploymentRequest) (*models.Deployment, error)
 	deleteDeploymentFunc func(ctx context.Context, userID string, deploymentID string) (*models.Deployment, error)
+	getServiceFunc       func(ctx context.Context, userID string, deploymentID string) (*models.Service, error)
+	updateServiceFunc    func(ctx context.Context, userID string, deploymentID string, req service.UpdateServiceRequest) (*models.Service, error)
 }
 
 func (mock *mockDeploymentService) ListDeployments(ctx context.Context, projectID string) ([]models.Deployment, error) {
@@ -43,6 +45,14 @@ func (mock *mockDeploymentService) UpdateDeployment(ctx context.Context, userID 
 
 func (mock *mockDeploymentService) DeleteDeployment(ctx context.Context, userID string, deploymentID string) (*models.Deployment, error) {
 	return mock.deleteDeploymentFunc(ctx, userID, deploymentID) // モック関数を呼び出す
+}
+
+func (mock *mockDeploymentService) GetService(ctx context.Context, userID string, deploymentID string) (*models.Service, error) {
+	return mock.getServiceFunc(ctx, userID, deploymentID) // モック関数を呼び出す
+}
+
+func (mock *mockDeploymentService) UpdateService(ctx context.Context, userID string, deploymentID string, req service.UpdateServiceRequest) (*models.Service, error) {
+	return mock.updateServiceFunc(ctx, userID, deploymentID, req) // モック関数を呼び出す
 }
 
 // setupDeploymentEchoContext はテスト用の Echo コンテキストを生成するヘルパー関数
@@ -579,5 +589,106 @@ func TestListApplyHistories_存在しないdeploymentは404になる(t *testing.
 	}
 	if responseRecorder.Code != http.StatusNotFound { // 404 が返ることを確認する
 		t.Errorf("期待するステータスコード: %d, 実際のステータスコード: %d", http.StatusNotFound, responseRecorder.Code)
+	}
+}
+
+// TestGetService_正常にService設定が返る は GET /deployments/:id/service で 200 が返ることを確認する
+func TestGetService_正常にService設定が返る(t *testing.T) {
+	mockSvc := &mockDeploymentService{
+		getServiceFunc: func(ctx context.Context, userID string, deploymentID string) (*models.Service, error) {
+			return &models.Service{DeploymentID: deploymentID, Port: 8080, TargetPort: 3000}, nil // service を返す
+		},
+	}
+	mockApplySvc := &mockApplyService{}
+	deploymentHandler := NewDeploymentHandler(mockSvc, mockApplySvc) // ハンドラーを生成する
+
+	echoCtx, responseRecorder := setupDeploymentEchoContext(http.MethodGet, "/deployments/deployment-id-1/service", "", map[string]string{"id": "deployment-id-1"}) // Echo コンテキストを生成する
+
+	err := deploymentHandler.GetService(echoCtx) // ハンドラーを実行する
+	if err != nil {
+		t.Fatalf("GetService がエラーを返しました: %v", err)
+	}
+	if responseRecorder.Code != http.StatusOK { // ステータスコードを確認する
+		t.Errorf("期待するステータスコード: %d, 実際のステータスコード: %d", http.StatusOK, responseRecorder.Code)
+	}
+	var responseBody models.Service
+	if err := json.Unmarshal(responseRecorder.Body.Bytes(), &responseBody); err != nil { // レスポンスをデコードする
+		t.Fatalf("レスポンスのデコードに失敗しました: %v", err)
+	}
+	if responseBody.Port != 8080 { // ポート番号を確認する
+		t.Errorf("期待する port: 8080, 実際の port: %d", responseBody.Port)
+	}
+}
+
+// TestGetService_他ユーザーのDeploymentは403が返る は所有者でない場合に 403 が返ることを確認する
+func TestGetService_他ユーザーのDeploymentは403が返る(t *testing.T) {
+	mockSvc := &mockDeploymentService{
+		getServiceFunc: func(ctx context.Context, userID string, deploymentID string) (*models.Service, error) {
+			return nil, service.ErrForbidden // ErrForbidden を返す
+		},
+	}
+	mockApplySvc := &mockApplyService{}
+	deploymentHandler := NewDeploymentHandler(mockSvc, mockApplySvc) // ハンドラーを生成する
+
+	echoCtx, responseRecorder := setupDeploymentEchoContext(http.MethodGet, "/deployments/deployment-id-1/service", "", map[string]string{"id": "deployment-id-1"}) // Echo コンテキストを生成する
+
+	err := deploymentHandler.GetService(echoCtx) // ハンドラーを実行する
+	if err != nil {
+		t.Fatalf("GetService がエラーを返しました: %v", err)
+	}
+	if responseRecorder.Code != http.StatusForbidden { // 403 が返ることを確認する
+		t.Errorf("期待するステータスコード: %d, 実際のステータスコード: %d", http.StatusForbidden, responseRecorder.Code)
+	}
+}
+
+// TestUpdateService_pendingフィールドが更新され200が返る は PUT で pending が更新され 200 が返ることを確認する
+func TestUpdateService_pendingフィールドが更新され200が返る(t *testing.T) {
+	mockSvc := &mockDeploymentService{
+		updateServiceFunc: func(ctx context.Context, userID string, deploymentID string, req service.UpdateServiceRequest) (*models.Service, error) {
+			port := 9090                                                                          // 更新後のポート番号を設定する
+			return &models.Service{DeploymentID: deploymentID, PendingPort: port}, nil // 更新後の service を返す
+		},
+	}
+	mockApplySvc := &mockApplyService{}
+	deploymentHandler := NewDeploymentHandler(mockSvc, mockApplySvc) // ハンドラーを生成する
+
+	requestBody := `{"port": 9090}` // リクエストボディを設定する
+	echoCtx, responseRecorder := setupDeploymentEchoContext(http.MethodPut, "/deployments/deployment-id-1/service", requestBody, map[string]string{"id": "deployment-id-1"}) // Echo コンテキストを生成する
+
+	err := deploymentHandler.UpdateService(echoCtx) // ハンドラーを実行する
+	if err != nil {
+		t.Fatalf("UpdateService がエラーを返しました: %v", err)
+	}
+	if responseRecorder.Code != http.StatusOK { // ステータスコードを確認する
+		t.Errorf("期待するステータスコード: %d, 実際のステータスコード: %d", http.StatusOK, responseRecorder.Code)
+	}
+	var responseBody models.Service
+	if err := json.Unmarshal(responseRecorder.Body.Bytes(), &responseBody); err != nil { // レスポンスをデコードする
+		t.Fatalf("レスポンスのデコードに失敗しました: %v", err)
+	}
+	if responseBody.PendingPort != 9090 { // pending_port を確認する
+		t.Errorf("期待する pending_port: 9090, 実際の pending_port: %d", responseBody.PendingPort)
+	}
+}
+
+// TestUpdateService_他ユーザーのDeploymentは403が返る は所有者でない場合に 403 が返ることを確認する
+func TestUpdateService_他ユーザーのDeploymentは403が返る(t *testing.T) {
+	mockSvc := &mockDeploymentService{
+		updateServiceFunc: func(ctx context.Context, userID string, deploymentID string, req service.UpdateServiceRequest) (*models.Service, error) {
+			return nil, service.ErrForbidden // ErrForbidden を返す
+		},
+	}
+	mockApplySvc := &mockApplyService{}
+	deploymentHandler := NewDeploymentHandler(mockSvc, mockApplySvc) // ハンドラーを生成する
+
+	requestBody := `{"port": 9090}` // リクエストボディを設定する
+	echoCtx, responseRecorder := setupDeploymentEchoContext(http.MethodPut, "/deployments/deployment-id-1/service", requestBody, map[string]string{"id": "deployment-id-1"}) // Echo コンテキストを生成する
+
+	err := deploymentHandler.UpdateService(echoCtx) // ハンドラーを実行する
+	if err != nil {
+		t.Fatalf("UpdateService がエラーを返しました: %v", err)
+	}
+	if responseRecorder.Code != http.StatusForbidden { // 403 が返ることを確認する
+		t.Errorf("期待するステータスコード: %d, 実際のステータスコード: %d", http.StatusForbidden, responseRecorder.Code)
 	}
 }

@@ -51,11 +51,27 @@ func (mock *mockDeploymentRepository) Updates(ctx context.Context, tx *gorm.DB, 
 
 // mockServiceRepository は ServiceRepository のテスト用モック実装
 type mockServiceRepository struct {
-	createFunc func(ctx context.Context, service *models.Service) error
+	createFunc              func(ctx context.Context, service *models.Service) error
+	findByDeploymentIDFunc  func(ctx context.Context, deploymentID string) (*models.Service, error)
+	updateFunc              func(ctx context.Context, service *models.Service) error
 }
 
 func (mock *mockServiceRepository) Create(ctx context.Context, service *models.Service) error {
 	return mock.createFunc(ctx, service) // モック関数を呼び出す
+}
+
+func (mock *mockServiceRepository) FindByDeploymentID(ctx context.Context, deploymentID string) (*models.Service, error) {
+	if mock.findByDeploymentIDFunc != nil { // モック関数が設定されている場合は呼び出す
+		return mock.findByDeploymentIDFunc(ctx, deploymentID)
+	}
+	return &models.Service{DeploymentID: deploymentID}, nil // デフォルトは空の service を返す
+}
+
+func (mock *mockServiceRepository) Update(ctx context.Context, service *models.Service) error {
+	if mock.updateFunc != nil { // モック関数が設定されている場合は呼び出す
+		return mock.updateFunc(ctx, service)
+	}
+	return nil // デフォルトは nil を返す
 }
 
 // mockProjectRepository は ProjectRepository のテスト用モック実装（所有権チェック用）
@@ -395,5 +411,135 @@ func TestListDeployments_正常に一覧が返る(t *testing.T) {
 	}
 	if len(result) != 2 { // deployment 数を確認する
 		t.Errorf("期待する deployment 数: 2, 実際の deployment 数: %d", len(result))
+	}
+}
+
+// TestGetService_正常にService設定が取得される は GetService で service が返ることを確認する
+func TestGetService_正常にService設定が取得される(t *testing.T) {
+	expectedService := &models.Service{
+		DeploymentID: "deployment-id-1", // デプロイメント ID を設定する
+		Port:         8080,              // ポート番号を設定する
+		TargetPort:   3000,              // ターゲットポートを設定する
+	}
+
+	deploymentRepo := &mockDeploymentRepository{
+		findByIDFunc: func(ctx context.Context, deploymentID string) (*models.Deployment, error) {
+			return &models.Deployment{ID: deploymentID, ProjectID: "project-id-1"}, nil // deployment を返す
+		},
+	}
+	serviceRepo := &mockServiceRepository{
+		findByDeploymentIDFunc: func(ctx context.Context, deploymentID string) (*models.Service, error) {
+			return expectedService, nil // service を返す
+		},
+	}
+	projectRepo := &mockProjectRepository{
+		findByIDNoTxFunc: func(ctx context.Context, projectID string) (*models.Project, error) {
+			return &models.Project{UserID: "test-user-id"}, nil // 所有者として返す
+		},
+	}
+
+	deploymentSvc := NewDeploymentService(deploymentRepo, serviceRepo, projectRepo) // サービスを生成する
+
+	result, err := deploymentSvc.GetService(context.Background(), "test-user-id", "deployment-id-1") // サービスを実行する
+	if err != nil {
+		t.Fatalf("GetService がエラーを返しました: %v", err)
+	}
+	if result.Port != 8080 { // ポート番号が一致することを確認する
+		t.Errorf("期待する port: 8080, 実際の port: %d", result.Port)
+	}
+	if result.TargetPort != 3000 { // ターゲットポートが一致することを確認する
+		t.Errorf("期待する target_port: 3000, 実際の target_port: %d", result.TargetPort)
+	}
+}
+
+// TestGetService_他ユーザーのDeploymentはErrForbiddenを返す は所有者でない場合に ErrForbidden が返ることを確認する
+func TestGetService_他ユーザーのDeploymentはErrForbiddenを返す(t *testing.T) {
+	deploymentRepo := &mockDeploymentRepository{
+		findByIDFunc: func(ctx context.Context, deploymentID string) (*models.Deployment, error) {
+			return &models.Deployment{ID: deploymentID, ProjectID: "project-id-1"}, nil // deployment を返す
+		},
+	}
+	serviceRepo := &mockServiceRepository{}
+	projectRepo := &mockProjectRepository{
+		findByIDNoTxFunc: func(ctx context.Context, projectID string) (*models.Project, error) {
+			return &models.Project{UserID: "other-user-id"}, nil // 別ユーザーとして返す
+		},
+	}
+
+	deploymentSvc := NewDeploymentService(deploymentRepo, serviceRepo, projectRepo) // サービスを生成する
+
+	_, err := deploymentSvc.GetService(context.Background(), "test-user-id", "deployment-id-1") // サービスを実行する
+	if !errors.Is(err, ErrForbidden) { // ErrForbidden が返ることを確認する
+		t.Errorf("ErrForbidden が返るべきですが実際のエラー: %v", err)
+	}
+}
+
+// TestUpdateService_pendingフィールドが更新される は UpdateService で pending フィールドが更新されることを確認する
+func TestUpdateService_pendingフィールドが更新される(t *testing.T) {
+	originalService := &models.Service{
+		DeploymentID:      "deployment-id-1",
+		PendingPort:       8080, // 更新前の値を設定する
+		PendingTargetPort: 3000, // 更新前の値を設定する
+	}
+
+	var savedService *models.Service // 保存された service を格納する変数を定義する
+	deploymentRepo := &mockDeploymentRepository{
+		findByIDFunc: func(ctx context.Context, deploymentID string) (*models.Deployment, error) {
+			return &models.Deployment{ID: deploymentID, ProjectID: "project-id-1"}, nil // deployment を返す
+		},
+	}
+	serviceRepo := &mockServiceRepository{
+		findByDeploymentIDFunc: func(ctx context.Context, deploymentID string) (*models.Service, error) {
+			return originalService, nil // 元の service を返す
+		},
+		updateFunc: func(ctx context.Context, service *models.Service) error {
+			savedService = service // 保存された service をキャプチャする
+			return nil
+		},
+	}
+	projectRepo := &mockProjectRepository{
+		findByIDNoTxFunc: func(ctx context.Context, projectID string) (*models.Project, error) {
+			return &models.Project{UserID: "test-user-id"}, nil // 所有者として返す
+		},
+	}
+
+	deploymentSvc := NewDeploymentService(deploymentRepo, serviceRepo, projectRepo) // サービスを生成する
+	newPort := 9090                                                                   // 更新するポート番号を設定する
+	req := UpdateServiceRequest{
+		Port: &newPort, // port のみ送る
+	}
+
+	result, err := deploymentSvc.UpdateService(context.Background(), "test-user-id", "deployment-id-1", req) // サービスを実行する
+	if err != nil {
+		t.Fatalf("UpdateService がエラーを返しました: %v", err)
+	}
+	if result.PendingPort != 9090 { // pending_port が更新されていることを確認する
+		t.Errorf("期待する pending_port: 9090, 実際の pending_port: %d", result.PendingPort)
+	}
+	if savedService.PendingTargetPort != 3000 { // 送っていない pending_target_port が変化していないことを確認する
+		t.Errorf("pending_target_port は変化しないはずですが変化しています: %d", savedService.PendingTargetPort)
+	}
+}
+
+// TestUpdateService_他ユーザーのDeploymentはErrForbiddenを返す は所有者でない場合に ErrForbidden が返ることを確認する
+func TestUpdateService_他ユーザーのDeploymentはErrForbiddenを返す(t *testing.T) {
+	deploymentRepo := &mockDeploymentRepository{
+		findByIDFunc: func(ctx context.Context, deploymentID string) (*models.Deployment, error) {
+			return &models.Deployment{ID: deploymentID, ProjectID: "project-id-1"}, nil // deployment を返す
+		},
+	}
+	serviceRepo := &mockServiceRepository{}
+	projectRepo := &mockProjectRepository{
+		findByIDNoTxFunc: func(ctx context.Context, projectID string) (*models.Project, error) {
+			return &models.Project{UserID: "other-user-id"}, nil // 別ユーザーとして返す
+		},
+	}
+
+	deploymentSvc := NewDeploymentService(deploymentRepo, serviceRepo, projectRepo) // サービスを生成する
+	req := UpdateServiceRequest{}
+
+	_, err := deploymentSvc.UpdateService(context.Background(), "test-user-id", "deployment-id-1", req) // サービスを実行する
+	if !errors.Is(err, ErrForbidden) { // ErrForbidden が返ることを確認する
+		t.Errorf("ErrForbidden が返るべきですが実際のエラー: %v", err)
 	}
 }

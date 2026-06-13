@@ -16,6 +16,8 @@ type DeploymentService interface {
 	GetDeployment(ctx context.Context, userID string, deploymentID string) (*models.Deployment, error)                                   // deployment を取得する
 	UpdateDeployment(ctx context.Context, userID string, deploymentID string, req UpdateDeploymentRequest) (*models.Deployment, error)   // deployment を更新する
 	DeleteDeployment(ctx context.Context, userID string, deploymentID string) (*models.Deployment, error)                                // deployment を削除（deleting 状態に変更）する
+	GetService(ctx context.Context, userID string, deploymentID string) (*models.Service, error)                                         // service 設定を取得する
+	UpdateService(ctx context.Context, userID string, deploymentID string, req UpdateServiceRequest) (*models.Service, error)            // service の pending フィールドを更新する
 }
 
 // CreateDeploymentRequest は POST /projects/:id/deployments のリクエスト構造体
@@ -31,6 +33,12 @@ type CreateDeploymentRequest struct {
 	DockerfilePath      string   `json:"dockerfile_path"`   // Dockerfile パス
 	InstanceSize        string   `json:"instance_size"`     // インスタンスサイズ
 	Replicas            int32    `json:"replicas"`          // レプリカ数
+}
+
+// UpdateServiceRequest は PUT /deployments/:id/service のリクエスト構造体
+type UpdateServiceRequest struct {
+	Port       *int                  `json:"port"`        // nil の場合は更新しない
+	TargetPort *int                  `json:"target_port"` // nil の場合は更新しない
 }
 
 // UpdateDeploymentRequest は PUT /deployments/:id のリクエスト構造体
@@ -193,6 +201,43 @@ func (svc *deploymentServiceImpl) DeleteDeployment(ctx context.Context, userID s
 		return nil, err // 保存エラーを返す
 	}
 	return deploymentData, nil // 更新後の deployment を返す
+}
+
+// GetService は deploymentID に紐づく service 設定を返す
+func (svc *deploymentServiceImpl) GetService(ctx context.Context, userID string, deploymentID string) (*models.Service, error) {
+	deploymentData, err := svc.deploymentRepo.FindByID(ctx, deploymentID) // deployment を取得して所有権チェック用に使う
+	if err != nil {
+		return nil, err // 取得エラーを返す
+	}
+	if err := svc.checkOwnership(ctx, userID, deploymentData.ProjectID); err != nil { // 所有権を確認する
+		return nil, err
+	}
+	return svc.serviceRepo.FindByDeploymentID(ctx, deploymentID) // リポジトリ経由で service を取得する
+}
+
+// UpdateService は送られてきたフィールドのみ pending_* を更新する
+func (svc *deploymentServiceImpl) UpdateService(ctx context.Context, userID string, deploymentID string, req UpdateServiceRequest) (*models.Service, error) {
+	deploymentData, err := svc.deploymentRepo.FindByID(ctx, deploymentID) // deployment を取得して所有権チェック用に使う
+	if err != nil {
+		return nil, err // 取得エラーを返す
+	}
+	if err := svc.checkOwnership(ctx, userID, deploymentData.ProjectID); err != nil { // 所有権を確認する
+		return nil, err
+	}
+	serviceData, err := svc.serviceRepo.FindByDeploymentID(ctx, deploymentID) // リポジトリ経由で service を取得する
+	if err != nil {
+		return nil, err // 取得エラーを返す
+	}
+	if req.Port != nil {
+		serviceData.PendingPort = *req.Port // pending_port を更新する
+	}
+	if req.TargetPort != nil {
+		serviceData.PendingTargetPort = *req.TargetPort // pending_target_port を更新する
+	}
+	if err := svc.serviceRepo.Update(ctx, serviceData); err != nil { // リポジトリ経由で保存する
+		return nil, err // 保存エラーを返す
+	}
+	return serviceData, nil // 更新後の service を返す
 }
 
 // ErrDeploymentNotFound は deployment が見つからない場合のエラー
