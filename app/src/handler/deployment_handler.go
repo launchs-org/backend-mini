@@ -9,15 +9,18 @@ import (
 	"gorm.io/gorm"
 )
 
+
 // DeploymentHandler は Deployment CRUD の HTTP ハンドラーを提供する
 type DeploymentHandler struct {
-	deploymentService service.DeploymentService // deployment サービスのインターフェース
+	deploymentService service.DeploymentService        // deployment サービスのインターフェース
+	applyService      service.ApplyServiceInterface    // apply サービスのインターフェース
 }
 
 // NewDeploymentHandler は DeploymentHandler を生成して返す
-func NewDeploymentHandler(deploymentService service.DeploymentService) *DeploymentHandler {
+func NewDeploymentHandler(deploymentService service.DeploymentService, applyService service.ApplyServiceInterface) *DeploymentHandler {
 	return &DeploymentHandler{
 		deploymentService: deploymentService, // 依存を注入する
+		applyService:      applyService,      // apply サービスを注入する
 	}
 }
 
@@ -57,10 +60,16 @@ func (deploymentHandler *DeploymentHandler) CreateDeployment(echoCtx echo.Contex
 
 // GetDeployment は GET /deployments/:id のハンドラー
 func (deploymentHandler *DeploymentHandler) GetDeployment(echoCtx echo.Context) error {
-	deploymentID := echoCtx.Param("id") // パスパラメータから deployment ID を取得する
+	userID := echoCtx.Get("UserID").(string) // ミドルウェアがセットした UserID を取得する
+	deploymentID := echoCtx.Param("id")      // パスパラメータから deployment ID を取得する
 
-	deploymentData, err := deploymentHandler.deploymentService.GetDeployment(echoCtx.Request().Context(), deploymentID) // サービスを呼び出して deployment を取得する
-	if err != nil {                                                                                                       // エラーが発生した場合
+	deploymentData, err := deploymentHandler.deploymentService.GetDeployment(echoCtx.Request().Context(), userID, deploymentID) // サービスを呼び出して deployment を取得する
+	if err != nil {                                                                                                               // エラーが発生した場合
+		if errors.Is(err, service.ErrForbidden) { // 所有者でない場合は 403 を返す
+			return echoCtx.JSON(http.StatusForbidden, map[string]string{
+				"error": "アクセスが禁止されています",
+			})
+		}
 		if errors.Is(err, gorm.ErrRecordNotFound) { // レコードが存在しない場合は 404 を返す
 			return echoCtx.JSON(http.StatusNotFound, map[string]string{
 				"error": "リソースが見つかりません",
@@ -75,7 +84,8 @@ func (deploymentHandler *DeploymentHandler) GetDeployment(echoCtx echo.Context) 
 
 // UpdateDeployment は PUT /deployments/:id のハンドラー
 func (deploymentHandler *DeploymentHandler) UpdateDeployment(echoCtx echo.Context) error {
-	deploymentID := echoCtx.Param("id") // パスパラメータから deployment ID を取得する
+	userID := echoCtx.Get("UserID").(string) // ミドルウェアがセットした UserID を取得する
+	deploymentID := echoCtx.Param("id")      // パスパラメータから deployment ID を取得する
 
 	var requestBody service.UpdateDeploymentRequest             // リクエストボディの構造体を定義する
 	if err := echoCtx.Bind(&requestBody); err != nil {         // リクエストをバインドする
@@ -84,8 +94,13 @@ func (deploymentHandler *DeploymentHandler) UpdateDeployment(echoCtx echo.Contex
 		})
 	}
 
-	deploymentData, err := deploymentHandler.deploymentService.UpdateDeployment(echoCtx.Request().Context(), deploymentID, requestBody) // サービスを呼び出して deployment を更新する
-	if err != nil {                                                                                                                       // エラーが発生した場合
+	deploymentData, err := deploymentHandler.deploymentService.UpdateDeployment(echoCtx.Request().Context(), userID, deploymentID, requestBody) // サービスを呼び出して deployment を更新する
+	if err != nil {                                                                                                                               // エラーが発生した場合
+		if errors.Is(err, service.ErrForbidden) { // 所有者でない場合は 403 を返す
+			return echoCtx.JSON(http.StatusForbidden, map[string]string{
+				"error": "アクセスが禁止されています",
+			})
+		}
 		if errors.Is(err, gorm.ErrRecordNotFound) { // レコードが存在しない場合は 404 を返す
 			return echoCtx.JSON(http.StatusNotFound, map[string]string{
 				"error": "リソースが見つかりません",
@@ -100,10 +115,16 @@ func (deploymentHandler *DeploymentHandler) UpdateDeployment(echoCtx echo.Contex
 
 // DeleteDeployment は DELETE /deployments/:id のハンドラー
 func (deploymentHandler *DeploymentHandler) DeleteDeployment(echoCtx echo.Context) error {
-	deploymentID := echoCtx.Param("id") // パスパラメータから deployment ID を取得する
+	userID := echoCtx.Get("UserID").(string) // ミドルウェアがセットした UserID を取得する
+	deploymentID := echoCtx.Param("id")      // パスパラメータから deployment ID を取得する
 
-	deploymentData, err := deploymentHandler.deploymentService.DeleteDeployment(echoCtx.Request().Context(), deploymentID) // サービスを呼び出して deployment を削除する
-	if err != nil {                                                                                                          // エラーが発生した場合
+	deploymentData, err := deploymentHandler.deploymentService.DeleteDeployment(echoCtx.Request().Context(), userID, deploymentID) // サービスを呼び出して deployment を削除する
+	if err != nil {                                                                                                                   // エラーが発生した場合
+		if errors.Is(err, service.ErrForbidden) { // 所有者でない場合は 403 を返す
+			return echoCtx.JSON(http.StatusForbidden, map[string]string{
+				"error": "アクセスが禁止されています",
+			})
+		}
 		if errors.Is(err, gorm.ErrRecordNotFound) { // レコードが存在しない場合は 404 を返す
 			return echoCtx.JSON(http.StatusNotFound, map[string]string{
 				"error": "リソースが見つかりません",
@@ -114,4 +135,33 @@ func (deploymentHandler *DeploymentHandler) DeleteDeployment(echoCtx echo.Contex
 		})
 	}
 	return echoCtx.JSON(http.StatusOK, deploymentData) // 更新後の deployment を返す
+}
+
+// ApplyDeployment は POST /deployments/:id/apply のハンドラー
+func (deploymentHandler *DeploymentHandler) ApplyDeployment(echoCtx echo.Context) error {
+	userID := echoCtx.Get("UserID").(string) // ミドルウェアがセットした UserID を取得する
+	deploymentID := echoCtx.Param("id")      // パスパラメータから deployment ID を取得する
+
+	applyResult, err := deploymentHandler.applyService.Apply(echoCtx.Request().Context(), userID, deploymentID) // apply サービスを呼び出す
+	if err != nil {                                                                                               // エラーが発生した場合
+		if errors.Is(err, service.ErrForbidden) { // 所有者でない場合は 403 を返す
+			return echoCtx.JSON(http.StatusForbidden, map[string]string{
+				"error": "アクセスが禁止されています",
+			})
+		}
+		if errors.Is(err, service.ErrAlreadyApplying) { // apply 中の場合は 409 を返す
+			return echoCtx.JSON(http.StatusConflict, map[string]string{
+				"error": "apply が実行中です",
+			})
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) { // deployment が存在しない場合は 404 を返す
+			return echoCtx.JSON(http.StatusNotFound, map[string]string{
+				"error": "リソースが見つかりません",
+			})
+		}
+		return echoCtx.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "内部サーバーエラー",
+		})
+	}
+	return echoCtx.JSON(http.StatusOK, applyResult) // apply 結果を返す
 }

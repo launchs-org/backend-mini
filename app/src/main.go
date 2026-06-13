@@ -72,8 +72,10 @@ func main() {
 	// deployment ハンドラーを DI 組み立てする
 	deploymentRepo := repository.NewDeploymentRepository(repository.Database)                     // deployment リポジトリを生成する
 	serviceRepo := repository.NewServiceRepository(repository.Database)                           // service リポジトリを生成する
-	deploymentServiceImpl := service.NewDeploymentService(deploymentRepo, serviceRepo)            // deployment サービスを生成する
-	deploymentHandler := handler.NewDeploymentHandler(deploymentServiceImpl)                      // deployment ハンドラーを生成する
+	deploymentServiceImpl := service.NewDeploymentService(deploymentRepo, serviceRepo, projectRepo) // deployment サービスを生成する
+	applyHistoryRepo := repository.NewApplyHistoryRepository(repository.Database)                 // apply_history リポジトリを生成する
+	applyServiceImpl := service.NewApplyService(repository.Database, k8sClient, deploymentRepo, applyHistoryRepo, projectRepo) // apply サービスを生成する
+	deploymentHandler := handler.NewDeploymentHandler(deploymentServiceImpl, applyServiceImpl)    // deployment ハンドラーを生成する
 
 	// ルーターを生成してサーバーを起動する
 	echoRouter := router.New(router.RouterOptions{

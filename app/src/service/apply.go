@@ -7,12 +7,21 @@ import (
 	"app/repository"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"gorm.io/gorm"
 	k8sclient "k8s.io/client-go/kubernetes"
 )
+
+// ErrAlreadyApplying は apply 中の deployment に再 apply しようとした場合のエラー
+var ErrAlreadyApplying = errors.New("already applying")
+
+// ApplyServiceInterface は apply サービスのインターフェース
+type ApplyServiceInterface interface {
+	Apply(ctx context.Context, userID string, deploymentID string) (*ApplyResult, error) // apply を実行する
+}
 
 // ApplyService は apply のコアロジックを実装するサービス
 type ApplyService struct {
@@ -48,7 +57,7 @@ func NewApplyService(
 }
 
 // Apply は deployment に対して apply を実行する
-func (applyService *ApplyService) Apply(ctx context.Context, deploymentID string) (*ApplyResult, error) {
+func (applyService *ApplyService) Apply(ctx context.Context, userID string, deploymentID string) (*ApplyResult, error) {
 	var applyResult *ApplyResult // 結果を格納する変数を定義する
 
 	err := applyService.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error { // トランザクションを開始する
@@ -56,6 +65,20 @@ func (applyService *ApplyService) Apply(ctx context.Context, deploymentID string
 		deploymentData, err := applyService.DeploymentRepo.FindByIDForUpdate(ctx, tx, deploymentID) // FOR UPDATE ロック付きで deployment を取得する
 		if err != nil {
 			return fmt.Errorf("deployment not found: %w", err) // 取得エラーを返す
+		}
+
+		// 所有権を確認する（トランザクション外で取得）
+		ownerProjectData, ownerErr := applyService.ProjectRepository.FindByIDNoTx(ctx, deploymentData.ProjectID) // project を取得する
+		if ownerErr != nil {
+			return fmt.Errorf("project not found: %w", ownerErr) // 取得エラーを返す
+		}
+		if ownerProjectData.UserID != userID { // UserID が一致しない場合は禁止エラーを返す
+			return ErrForbidden
+		}
+
+		// apply 中の deployment への二重 apply を防ぐ
+		if deploymentData.AppStatus == models.AppStatusDeploying { // 既に apply 中の場合は競合エラーを返す
+			return ErrAlreadyApplying
 		}
 
 		// 2. Project を取得する（namespace 解決のため）

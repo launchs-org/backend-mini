@@ -42,6 +42,7 @@ func New(opts RouterOptions) *echo.Echo {
 	apiGroup.GET("/deployments/:id", opts.DeploymentHandler.GetDeployment)               // deployment 詳細取得エンドポイント
 	apiGroup.PUT("/deployments/:id", opts.DeploymentHandler.UpdateDeployment)            // deployment 更新エンドポイント
 	apiGroup.DELETE("/deployments/:id", opts.DeploymentHandler.DeleteDeployment)         // deployment 削除エンドポイント
+	apiGroup.POST("/deployments/:id/apply", opts.DeploymentHandler.ApplyDeployment)      // deployment apply エンドポイント
 
 	return router
 }
