@@ -1,0 +1,183 @@
+package service
+
+import (
+	"app/models"
+	"app/repository"
+	"context"
+
+	"gorm.io/gorm"
+)
+
+// DeploymentService は Deployment CRUD のビジネスロジックを定義するインターフェース
+type DeploymentService interface {
+	ListDeployments(ctx context.Context, projectID string) ([]models.Deployment, error)                                         // deployment 一覧を取得する
+	CreateDeployment(ctx context.Context, req CreateDeploymentRequest) (*models.Deployment, error)                              // deployment を作成する
+	GetDeployment(ctx context.Context, deploymentID string) (*models.Deployment, error)                                         // deployment を取得する
+	UpdateDeployment(ctx context.Context, deploymentID string, req UpdateDeploymentRequest) (*models.Deployment, error)         // deployment を更新する
+	DeleteDeployment(ctx context.Context, deploymentID string) (*models.Deployment, error)                                      // deployment を削除（deleting 状態に変更）する
+}
+
+// CreateDeploymentRequest は POST /projects/:id/deployments のリクエスト構造体
+type CreateDeploymentRequest struct {
+	ProjectID           string   // プロジェクト ID
+	Name                string   `json:"name"`              // デプロイメント名
+	Type                string   `json:"type"`              // image_url / dockerfile / railpack
+	ImageURL            string   `json:"image_url"`         // image_url 専用
+	GithubRepoURL       string   `json:"github_repo_url"`   // GitHub リポジトリ URL
+	GithubBranch        string   `json:"github_branch"`     // GitHub ブランチ名
+	GithubCommitSHA     string   `json:"github_commit_sha"` // GitHub コミット SHA
+	GithubRepoDirectory string   `json:"build_directory"`   // ビルド作業ディレクトリ
+	DockerfilePath      string   `json:"dockerfile_path"`   // Dockerfile パス
+	InstanceSize        string   `json:"instance_size"`     // インスタンスサイズ
+	Replicas            int32    `json:"replicas"`          // レプリカ数
+}
+
+// UpdateDeploymentRequest は PUT /deployments/:id のリクエスト構造体
+type UpdateDeploymentRequest struct {
+	ImageURL            *string  `json:"image_url"`         // nil の場合は更新しない
+	GithubRepoURL       *string  `json:"github_repo_url"`   // nil の場合は更新しない
+	GithubBranch        *string  `json:"github_branch"`     // nil の場合は更新しない
+	GithubCommitSHA     *string  `json:"github_commit_sha"` // nil の場合は更新しない
+	GithubRepoDirectory *string  `json:"build_directory"`   // nil の場合は更新しない
+	DockerfilePath      *string  `json:"dockerfile_path"`   // nil の場合は更新しない
+	InstanceSize        *string  `json:"instance_size"`     // nil の場合は更新しない
+	Replicas            *int32   `json:"replicas"`          // nil の場合は更新しない
+	Command             []string `json:"command"`           // nil の場合は更新しない
+	Args                []string `json:"args"`              // nil の場合は更新しない
+}
+
+// deploymentServiceImpl は DeploymentService の実装
+type deploymentServiceImpl struct {
+	deploymentRepo repository.DeploymentRepository // deployment リポジトリ
+	serviceRepo    repository.ServiceRepository    // service リポジトリ
+}
+
+// NewDeploymentService は DeploymentService の実装を返す
+func NewDeploymentService(deploymentRepo repository.DeploymentRepository, serviceRepo repository.ServiceRepository) DeploymentService {
+	return &deploymentServiceImpl{
+		deploymentRepo: deploymentRepo, // deployment リポジトリを注入する
+		serviceRepo:    serviceRepo,    // service リポジトリを注入する
+	}
+}
+
+// ListDeployments は projectID に紐づく deployment 一覧を返す
+func (svc *deploymentServiceImpl) ListDeployments(ctx context.Context, projectID string) ([]models.Deployment, error) {
+	return svc.deploymentRepo.FindAllByProjectID(ctx, projectID) // リポジトリ経由で取得する
+}
+
+// CreateDeployment は Deployment レコードと Service レコードを作成する
+func (svc *deploymentServiceImpl) CreateDeployment(ctx context.Context, req CreateDeploymentRequest) (*models.Deployment, error) {
+	// デフォルト値を設定する
+	if req.InstanceSize == "" {
+		req.InstanceSize = "small" // インスタンスサイズのデフォルトを設定する
+	}
+	if req.Replicas == 0 {
+		req.Replicas = 1 // レプリカ数のデフォルトを設定する
+	}
+	if req.DockerfilePath == "" {
+		req.DockerfilePath = "./Dockerfile" // Dockerfile パスのデフォルトを設定する
+	}
+	if req.GithubRepoDirectory == "" {
+		req.GithubRepoDirectory = "./" // ビルドディレクトリのデフォルトを設定する
+	}
+
+	// Deployment レコードを作成する
+	deploymentData := &models.Deployment{
+		ProjectID:                  req.ProjectID,                               // プロジェクト ID を設定する
+		Name:                       req.Name,                                    // デプロイメント名を設定する
+		Type:                       models.DeploymentType(req.Type),             // デプロイメントタイプを設定する
+		Status:                     models.DeploymentStatusPending,              // 初期ステータスを設定する
+		AppStatus:                  models.AppStatusPending,                     // 初期アプリステータスを設定する
+		PendingImageURL:            req.ImageURL,                                // pending に設定する
+		PendingGithubRepoURL:       req.GithubRepoURL,                          // pending に設定する
+		PendingGithubBranch:        req.GithubBranch,                           // pending に設定する
+		PendingGithubCommitSHA:     req.GithubCommitSHA,                        // pending に設定する
+		PendingGithubRepoDirectory: req.GithubRepoDirectory,                    // pending に設定する
+		PendingDockerfilePath:      req.DockerfilePath,                         // pending に設定する
+		PendingInstanceSize:        req.InstanceSize,                           // pending に設定する
+		PendingReplicas:            req.Replicas,                               // pending に設定する
+	}
+
+	// TODO: Deployment と Service の作成をトランザクションでまとめ、Service 作成失敗時に Deployment もロールバックする
+	if err := svc.deploymentRepo.Create(ctx, deploymentData); err != nil { // リポジトリ経由で Deployment レコードを作成する
+		return nil, err // 作成エラーを返す
+	}
+
+	// Service レコードを同時に作成する（ports は空）
+	serviceData := &models.Service{
+		DeploymentID: deploymentData.ID,           // デプロイメント ID を設定する
+		Status:       models.ServiceStatusPending, // 初期ステータスを設定する
+	}
+	if err := svc.serviceRepo.Create(ctx, serviceData); err != nil { // リポジトリ経由で Service レコードを作成する
+		return nil, err // 作成エラーを返す
+	}
+
+	return deploymentData, nil // 作成した deployment を返す
+}
+
+// GetDeployment は deploymentID に対応する deployment を返す
+func (svc *deploymentServiceImpl) GetDeployment(ctx context.Context, deploymentID string) (*models.Deployment, error) {
+	return svc.deploymentRepo.FindByID(ctx, deploymentID) // リポジトリ経由で取得する
+}
+
+// UpdateDeployment は送られてきたフィールドのみ pending_*** を更新する
+func (svc *deploymentServiceImpl) UpdateDeployment(ctx context.Context, deploymentID string, req UpdateDeploymentRequest) (*models.Deployment, error) {
+	deploymentData, err := svc.deploymentRepo.FindByID(ctx, deploymentID) // リポジトリ経由で取得する
+	if err != nil {
+		return nil, err // 取得エラーを返す
+	}
+
+	// 送られてきたフィールドのみ pending_*** に書き込む
+	if req.ImageURL != nil {
+		deploymentData.PendingImageURL = *req.ImageURL // pending image_url を更新する
+	}
+	if req.GithubRepoURL != nil {
+		deploymentData.PendingGithubRepoURL = *req.GithubRepoURL // pending github_repo_url を更新する
+	}
+	if req.GithubBranch != nil {
+		deploymentData.PendingGithubBranch = *req.GithubBranch // pending github_branch を更新する
+	}
+	if req.GithubCommitSHA != nil {
+		deploymentData.PendingGithubCommitSHA = *req.GithubCommitSHA // pending github_commit_sha を更新する
+	}
+	if req.GithubRepoDirectory != nil {
+		deploymentData.PendingGithubRepoDirectory = *req.GithubRepoDirectory // pending build_directory を更新する
+	}
+	if req.DockerfilePath != nil {
+		deploymentData.PendingDockerfilePath = *req.DockerfilePath // pending dockerfile_path を更新する
+	}
+	if req.InstanceSize != nil {
+		deploymentData.PendingInstanceSize = *req.InstanceSize // pending instance_size を更新する
+	}
+	if req.Replicas != nil {
+		deploymentData.PendingReplicas = *req.Replicas // pending replicas を更新する
+	}
+	if req.Command != nil {
+		deploymentData.PendingCommand = req.Command // pending command を更新する
+	}
+	if req.Args != nil {
+		deploymentData.PendingArgs = req.Args // pending args を更新する
+	}
+
+	if err := svc.deploymentRepo.Save(ctx, deploymentData); err != nil { // リポジトリ経由で保存する
+		return nil, err // 保存エラーを返す
+	}
+	return deploymentData, nil // 更新後の deployment を返す
+}
+
+// DeleteDeployment は deployment のステータスを deleting に変更する
+func (svc *deploymentServiceImpl) DeleteDeployment(ctx context.Context, deploymentID string) (*models.Deployment, error) {
+	deploymentData, err := svc.deploymentRepo.FindByID(ctx, deploymentID) // リポジトリ経由で取得する
+	if err != nil {
+		return nil, err // 取得エラーを返す
+	}
+
+	deploymentData.Status = models.DeploymentStatusDeleting                       // ステータスを deleting に変更する
+	if err := svc.deploymentRepo.Save(ctx, deploymentData); err != nil { // リポジトリ経由で保存する
+		return nil, err // 保存エラーを返す
+	}
+	return deploymentData, nil // 更新後の deployment を返す
+}
+
+// ErrDeploymentNotFound は deployment が見つからない場合のエラー
+var ErrDeploymentNotFound = gorm.ErrRecordNotFound
