@@ -100,3 +100,10 @@ api.DELETE("/env-mounts/:id",           h.DeleteEnvMount)
 - [ ] 同一 deployment に同じ env_var_id を2回 mount すると 409 になること
 - [ ] `PUT /env-mounts/:id` で `override_key` を送ると `pending_override_key` に入ること
 - [ ] `DELETE /env-mounts/:id` で `status = deleting` になること
+
+### repository 層テスト
+
+- [ ] `EnvVarMountRepository.Create` でレコードが DB に保存されること
+- [ ] 同一 deployment + env_var_id の組み合わせで UNIQUE 制約エラーが返ること
+- [ ] `EnvVarMountRepository.Save` で `pending_override_key` が更新されること
+- [ ] `EnvVarMountRepository.UpdateStatus` で `status = deleting` に更新できること

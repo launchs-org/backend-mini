@@ -55,3 +55,8 @@ tx.Model(&models.EnvVarMount{}).
 - [ ] apply 後に k8s Secret が作成されること
 - [ ] apply 後に env_var_mounts.status が applied になること
 - [ ] k8s Deployment の envFrom に ConfigMap/Secret が含まれること
+
+### repository 層テスト
+
+- [ ] `EnvVarMountRepository.FindAllByDeploymentID` で全マウントが取得できること
+- [ ] `EnvVarMountRepository.UpdateStatus` で `status = applied` に一括更新できること

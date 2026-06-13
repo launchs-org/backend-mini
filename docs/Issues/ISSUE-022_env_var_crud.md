@@ -113,3 +113,10 @@ api.DELETE("/env-vars/:id",        h.DeleteEnvVar)
 - [ ] key に記号が含まれると 400 になること
 - [ ] mount されている env_var を DELETE すると 409 になること
 - [ ] value の PUT が即時反映されること
+
+### repository 層テスト
+
+- [ ] `EnvVarRepository.Create` でレコードが DB に保存されること
+- [ ] `EnvVarRepository.FindByID` で `is_secret=true` のレコードが取得できること
+- [ ] `EnvVarRepository.Delete` でマウント済みの場合は削除が阻止されること（外部キー制約または service 層チェック）
+- [ ] `EnvVarRepository.Save` で value の更新が即時反映されること

@@ -37,3 +37,8 @@ for _, vm := range volMounts {
 - [ ] apply 後に k8s PVC が作成されること
 - [ ] apply 後に `pending_mount_path` が空になること
 - [ ] apply 後に Deployment の volumeMounts に設定されること
+
+### repository 層テスト
+
+- [ ] `VolumeMountRepository.Save` で apply 後に `pending_mount_path` が空になること
+- [ ] `VolumeMountRepository.FindAllByDeploymentID` で全ボリュームマウントが取得できること

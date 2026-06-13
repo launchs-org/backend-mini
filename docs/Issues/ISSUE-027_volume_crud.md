@@ -98,3 +98,10 @@ api.DELETE("/volumes/:id",        h.DeleteVolume)
 - [ ] size_mb=0 で 400 になること
 - [ ] mount されている volume を DELETE すると 409 になること
 - [ ] volume 作成で `status = pending` になること
+
+### repository 層テスト
+
+- [ ] `VolumeRepository.Create` でレコードが DB に保存されること
+- [ ] `VolumeRepository.FindByID` で存在しない ID を渡すと `ErrRecordNotFound` が返ること
+- [ ] `VolumeRepository.Delete` でマウント済みの場合は削除が阻止されること（外部キー制約または service 層チェック）
+- [ ] `VolumeRepository.FindByID` で `status = pending` のレコードが取得できること

@@ -49,3 +49,8 @@ func needsBuild(d models.Deployment) bool {
 - [ ] image_url 型でビルド不要と判定されること
 - [ ] GitHub 情報が変化していない場合にビルド不要と判定されること
 - [ ] GitHub 情報が変化している場合にビルド必要と判定されること
+
+### repository 層テスト
+
+- [ ] `DeploymentBuildRepository.Create` でレコードが DB に保存されること
+- [ ] `DeploymentRepository.FindByID` で `pending_github_commit_sha` が取得できること

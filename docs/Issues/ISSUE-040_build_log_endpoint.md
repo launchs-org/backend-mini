@@ -43,3 +43,9 @@ api.GET("/deployments/:id/builds/:build_id/logs",   h.GetBuildLog)
 - [ ] ビルド履歴が新しい順で返ること
 - [ ] since / until でログがフィルタされること
 - [ ] 存在しない build_id で 404 が返ること
+
+### repository 層テスト
+
+- [ ] `DeploymentBuildRepository.FindAllByDeploymentID` で全履歴が新しい順で返ること
+- [ ] `BuildLogRepository.FindByBuildID` で `since` / `until` によるフィルタが正しく動作すること
+- [ ] `DeploymentBuildRepository.FindByID` で存在しない ID を渡すと `ErrRecordNotFound` が返ること

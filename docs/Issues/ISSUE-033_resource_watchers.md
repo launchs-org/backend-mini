@@ -33,3 +33,8 @@ func WatchPVCs(ctx context.Context, db *gorm.DB, client *kubernetes.Clientset) {
 
 - [ ] PVC が Bound になると `volumes.status = bound` になること
 - [ ] PVC が削除されると `volumes` レコードが DB から削除されること
+
+### repository 層テスト
+
+- [ ] `VolumeRepository.UpdateStatus` で `status = bound` に更新できること
+- [ ] `VolumeRepository.Delete` で PVC 削除時にレコードが DB から削除されること

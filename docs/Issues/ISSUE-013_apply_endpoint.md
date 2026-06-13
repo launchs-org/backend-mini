@@ -66,3 +66,8 @@ api.POST("/deployments/:id/apply", h.ApplyDeployment)
 - [ ] 存在しない deployment_id で 404 が返ること
 - [ ] `status = deleting` の deployment に apply すると 409 が返ること
 - [ ] pending_*** が全て空の場合でも apply が通ること（現在値を維持して再 apply）
+
+### repository 層テスト
+
+- [ ] `DeploymentRepository.FindByID` で存在しない ID を渡すと `ErrRecordNotFound` が返ること
+- [ ] `DeploymentRepository.FindByID` で `status = deleting` のレコードが正しく取得されること

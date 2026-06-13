@@ -63,3 +63,8 @@ e.POST("/webhooks/:deployment_id/github", h.ReceiveGithubWebhook)
 - [ ] 不正な署名で 401 が返ること
 - [ ] branch が一致しない push では apply がトリガーされないこと
 - [ ] push の commit SHA が `pending_github_commit_sha` に設定されること
+
+### repository 層テスト
+
+- [ ] `WebhookRepository.FindByDeploymentID` でシークレットが取得できること
+- [ ] `DeploymentRepository.Save` で `pending_github_commit_sha` が更新されること

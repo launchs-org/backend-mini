@@ -75,3 +75,8 @@ func DeleteIngressRoute(ctx context.Context, dc dynamic.Interface, namespace, na
 - [ ] `ApplyIngressRoute` で k8s に IngressRoute が作成されること
 - [ ] `Host` と `PathPrefix` が正しく設定されること
 - [ ] 再 apply で更新されること（Force: true）
+
+### repository 層テスト
+
+- [ ] `IngressRepository.Save` で apply 後の `current_host` が更新されること
+- [ ] `IngressRepository.FindByDeploymentID` で存在しない deployment_id を渡すと `ErrRecordNotFound` が返ること

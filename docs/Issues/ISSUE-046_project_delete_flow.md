@@ -61,3 +61,9 @@ func (s *ProjectService) waitAndDeleteNamespace(ctx context.Context, projectID, 
 - [ ] 全リソース削除後に k8s namespace が削除されること
 - [ ] Watcher が namespace 削除を検知して project DB レコードが削除されること
 - [ ] 削除中の project に新規 deployment を作成すると 409 になること
+
+### repository 層テスト
+
+- [ ] `DeploymentRepository.FindAllByProjectID` で全 deployment が取得できること
+- [ ] `DeploymentRepository.UpdateStatus` で全 deployment を `status = deleting` に一括更新できること
+- [ ] `ProjectRepository.Delete` でレコードが DB から削除されること
