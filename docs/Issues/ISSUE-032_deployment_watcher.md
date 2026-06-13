@@ -108,3 +108,8 @@ func WatchDeployments(ctx context.Context, db *gorm.DB, client *kubernetes.Clien
 - [ ] apply 後に Watcher が `k8s_status` を更新すること
 - [ ] Pod が Ready になると `app_status = running` になること
 - [ ] Watcher プロセスが k8s 切断後に再接続すること
+
+### repository 層テスト
+
+- [ ] `DeploymentRepository.UpdateStatus` で `k8s_status` が更新されること
+- [ ] `DeploymentRepository.UpdateStatus` で `app_status = running` に更新できること

@@ -69,3 +69,8 @@ func DeleteService(ctx context.Context, client *kubernetes.Clientset, namespace,
 - [ ] `ApplyService` で k8s Service が作成されること
 - [ ] TCP / UDP 両方のポートが正しく設定されること
 - [ ] 再 apply で更新されること
+
+### repository 層テスト
+
+- [ ] `ServiceRepository.Save` で apply 後の `current_ports` が更新されること
+- [ ] `ServiceRepository.FindByDeploymentID` で存在しない deployment_id を渡すと `ErrRecordNotFound` が返ること

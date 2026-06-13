@@ -93,3 +93,9 @@ api.DELETE("/deployments/:id/ingress", h.DeleteIngress)
 - [ ] 同じ deployment に2回 POST すると 409 になること
 - [ ] service が存在しない場合に 400 になること
 - [ ] UNIQUE 制約でホスト名の重複が防がれること
+
+### repository 層テスト
+
+- [ ] `IngressRepository.Create` でレコードが DB に保存されること
+- [ ] `IngressRepository.FindByDeploymentID` でレコードが取得できること
+- [ ] ホスト名に UNIQUE 制約があり、重複時に DB エラーが返ること

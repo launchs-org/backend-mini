@@ -73,3 +73,10 @@ func WatchBuildJobs(ctx context.Context, db *gorm.DB, k8sClient *kubernetes.Clie
 - [ ] `current_build_id` に新しい build_id がセットされること
 - [ ] ビルド完了後に自動で apply が走り `app_status = deploying` になること
 - [ ] ビルドログが `build_log` に保存されること
+
+### repository 層テスト
+
+- [ ] `DeploymentBuildRepository.UpdateStatus` で `status = succeeded` に更新できること
+- [ ] `DeploymentBuildRepository.Save` で `built_image_url` が保存されること
+- [ ] `DeploymentRepository.Save` で `current_build_id` が更新されること
+- [ ] `BuildLogRepository.Create` でログレコードが DB に保存されること

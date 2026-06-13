@@ -86,3 +86,8 @@ api.PUT("/deployments/:id/service", h.UpdateService)
 - [ ] port が 0 や 65536 の場合にバリデーションエラーになること
 - [ ] 同一 protocol + port の重複で 400 になること
 - [ ] ports が空配列の場合にエラーになること
+
+### repository 層テスト
+
+- [ ] `ServiceRepository.FindByDeploymentID` でレコードが取得できること
+- [ ] `ServiceRepository.Save` で `pending_ports` フィールドが正しく更新されること

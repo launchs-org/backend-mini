@@ -124,3 +124,8 @@ func DeleteDeployment(ctx context.Context, client *kubernetes.Clientset, namespa
 - [ ] `command` / `args` が空の場合は manifest に含まれないこと
 - [ ] `ApplyDeployment` で k8s に Deployment が作成されること
 - [ ] 同名の Deployment を再度 apply すると更新されること
+
+### repository 層テスト
+
+- [ ] `ApplyHistoryRepository.Create` でレコードが DB に保存されること
+- [ ] `ApplyHistoryRepository.FindByDeploymentID` で該当レコードが返ること

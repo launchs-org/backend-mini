@@ -49,3 +49,8 @@ api.DELETE("/deployments/:id/webhook", h.DeleteWebhook)
 
 - [ ] Webhook 作成でシークレットが返ること
 - [ ] 同じ deployment に2回 POST すると 409 になること
+
+### repository 層テスト
+
+- [ ] `WebhookRepository.Create` でシークレットがハッシュ化されて DB に保存されること
+- [ ] 同一 deployment_id で UNIQUE 制約エラーが返ること

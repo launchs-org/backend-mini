@@ -66,3 +66,9 @@ api.DELETE("/volume-mounts/:id",           h.DeleteVolumeMount)
 
 - [ ] 同じ volume を同じ deployment に2回 mount すると 409 になること
 - [ ] `PUT /volume-mounts/:id` で `mount_path` を送ると `pending_mount_path` に入ること
+
+### repository 層テスト
+
+- [ ] `VolumeMountRepository.Create` でレコードが DB に保存されること
+- [ ] 同一 deployment + volume_id の組み合わせで UNIQUE 制約エラーが返ること
+- [ ] `VolumeMountRepository.Save` で `pending_mount_path` が更新されること

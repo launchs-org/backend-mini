@@ -74,3 +74,7 @@ api.GET("/deployments/:id/logs", h.GetPodLogs)
 - [ ] `since` パラメータでログがフィルタされること
 - [ ] Pod が存在しない場合に空文字列が返ること
 - [ ] `container` パラメータで特定コンテナのログが取得できること
+
+### repository 層テスト
+
+- [ ] `DeploymentRepository.FindByID` で `status = running` のレコードが取得できること

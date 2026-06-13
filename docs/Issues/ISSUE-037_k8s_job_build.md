@@ -87,3 +87,8 @@ func DeleteJob(ctx context.Context, client *kubernetes.Clientset, jobName string
 - [ ] k8s Job が正しいコマンドで作成されること
 - [ ] `deployment_builds.k8s_job_name` に Job 名が保存されること
 - [ ] Job 削除で関連 Pod も削除されること（PropagationPolicy=Background）
+
+### repository 層テスト
+
+- [ ] `DeploymentBuildRepository.Save` で `k8s_job_name` が保存されること
+- [ ] `DeploymentBuildRepository.FindByID` で存在しない ID を渡すと `ErrRecordNotFound` が返ること

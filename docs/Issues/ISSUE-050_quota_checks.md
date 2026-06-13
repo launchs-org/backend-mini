@@ -37,3 +37,10 @@ ISSUE-049
 - [ ] `max_replicas_per_deployment` を超える replicas 設定で 400 になること
 - [ ] `max_volume_mb` を超える volume 作成で 400 になること
 - [ ] quota 更新後に新しい制限が即時反映されること
+
+### repository 層テスト
+
+- [ ] `UserQuotaRepository.CountProjects` でプロジェクト数が正しくカウントされること
+- [ ] `UserQuotaRepository.CountDeployments` でデプロイメント数が正しくカウントされること
+- [ ] `UserQuotaRepository.SumVolumeMB` でボリューム合計が正しく集計されること
+- [ ] `UserQuotaRepository.Update` で quota 更新後に新しい制限値が取得できること

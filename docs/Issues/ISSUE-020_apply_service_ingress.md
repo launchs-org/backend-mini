@@ -51,3 +51,8 @@ if err := tx.Where("service_id = ?", svcModel.ID).First(&ingressModel).Error; er
 - [ ] apply 後に `services.pending_ports` が空になること
 - [ ] IngressRoute が存在する場合、apply 後に k8s IngressRoute が作成されること
 - [ ] Service も IngressRoute もない状態で apply がエラーにならないこと
+
+### repository 層テスト
+
+- [ ] `ServiceRepository.Save` で apply 後に `pending_ports` が空になること
+- [ ] `IngressRepository.FindByDeploymentID` で ingress が存在しない場合 `ErrRecordNotFound` が返ること

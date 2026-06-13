@@ -38,3 +38,8 @@ func CancelRunningBuild(ctx context.Context, db *gorm.DB, k8sClient *kubernetes.
 - [ ] building 中に apply を再度叩くと既存 Job が削除されること
 - [ ] キャンセルされたビルドの `status = cancelled` になること
 - [ ] building 中でない場合はキャンセル処理がスキップされること
+
+### repository 層テスト
+
+- [ ] `DeploymentBuildRepository.FindLatestByDeploymentID` で最新ビルドが取得できること
+- [ ] `DeploymentBuildRepository.UpdateStatus` で `status = cancelled` に更新できること

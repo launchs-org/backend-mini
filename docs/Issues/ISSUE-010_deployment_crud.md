@@ -136,3 +136,10 @@ api.DELETE("/deployments/:id",        h.DeleteDeployment)
 - [ ] `PUT /deployments` で送らなかったフィールドは変化しないこと
 - [ ] `type` カラムは PUT で変更できないこと
 - [ ] `DELETE /deployments/:id` で `status = deleting` になること
+
+### repository 層テスト
+
+- [ ] `DeploymentRepository.Create` でレコードが DB に保存されること
+- [ ] `DeploymentRepository.FindByID` で存在しない ID を渡すと `ErrRecordNotFound` が返ること
+- [ ] `DeploymentRepository.Save` で `pending_***` フィールドが正しく更新されること
+- [ ] `DeploymentRepository.Delete` でレコードが DB から削除されること

@@ -53,3 +53,9 @@ api.GET("/deployments/:id/apply-history/:history_id", h.GetApplyHistory)
 - [ ] 失敗した apply の `error_message` が返ること
 - [ ] 詳細取得で `manifests` の中身が返ること
 - [ ] 別の deployment の history_id で 404 になること
+
+### repository 層テスト
+
+- [ ] `ApplyHistoryRepository.FindAllByDeploymentID` で全履歴が新しい順で返ること
+- [ ] `ApplyHistoryRepository.FindByID` で存在しない ID を渡すと `ErrRecordNotFound` が返ること
+- [ ] `ApplyHistoryRepository.FindByID` で別 deployment の history_id を渡すと取得できないこと

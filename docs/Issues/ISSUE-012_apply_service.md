@@ -157,3 +157,10 @@ func (s *ApplyService) Apply(ctx context.Context, deploymentID string) (*ApplyRe
 - [ ] k8s apply 失敗時に `apply_history.status = failed` になること
 - [ ] k8s apply 失敗時に `pending_***` がそのまま残ること
 - [ ] 同一 deployment に並行 apply を投げると2つ目がロック待ちになること
+
+### repository 層テスト
+
+- [ ] `ApplyHistoryRepository.Create` でステータス付きのレコードが DB に保存されること
+- [ ] `ApplyHistoryRepository.UpdateStatus` で `status = failed` に更新できること
+- [ ] `DeploymentRepository.Save` で apply 後の `current_***` フィールドが更新されること
+- [ ] `DeploymentRepository.FindByID` に `FOR UPDATE` ロックが付与されること（並行 apply テスト）

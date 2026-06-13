@@ -22,3 +22,8 @@ func WatchNamespaces(ctx context.Context, db *gorm.DB, client *kubernetes.Client
 
 - [ ] namespace が削除されると `projects` レコードが DB から削除されること
 - [ ] launchs.org/managed ラベルがない namespace は無視されること
+
+### repository 層テスト
+
+- [ ] `ProjectRepository.FindByNamespace` で namespace 名からプロジェクトが取得できること
+- [ ] `ProjectRepository.Delete` で namespace 削除時にプロジェクトレコードが DB から削除されること

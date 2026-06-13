@@ -50,3 +50,8 @@ func DeletePVC(ctx context.Context, client *kubernetes.Clientset, namespace, nam
 - [ ] `ApplyPVC` で k8s PVC が作成されること
 - [ ] 既存 PVC を再 apply しても更新されないこと（エラーにもならないこと）
 - [ ] size が正しく設定されること
+
+### repository 層テスト
+
+- [ ] `VolumeRepository.Save` で apply 後に `status = bound` に更新できること
+- [ ] `VolumeMountRepository.FindAllByDeploymentID` で全マウントが取得できること

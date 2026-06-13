@@ -84,3 +84,8 @@ func buildEnvData(mounts []models.EnvVarMount) (configData map[string]string, se
 - [ ] is_secret=true の env_var が Secret に入ること
 - [ ] override_key が設定されている場合、そのキー名で ConfigMap/Secret に入ること
 - [ ] 再 apply で ConfigMap/Secret が更新されること
+
+### repository 層テスト
+
+- [ ] `EnvVarMountRepository.FindAllByDeploymentID` で全マウント済み env_var が返ること
+- [ ] `EnvVarMountRepository.Save` で apply 後に `pending_override_key` が空になること

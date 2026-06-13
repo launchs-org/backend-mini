@@ -58,3 +58,9 @@ case watch.Deleted:
 - [ ] k8s Service / IngressRoute も削除されること
 - [ ] Watcher が削除完了を検知して DB レコードが削除されること
 - [ ] 削除中（deleting）の deployment に apply すると 409 になること
+
+### repository 層テスト
+
+- [ ] `DeploymentRepository.UpdateStatus` で `status = deleting` に更新できること
+- [ ] `DeploymentRepository.Delete` でレコードが DB から削除されること
+- [ ] `ServiceRepository.FindByDeploymentID` で削除対象のサービスが取得できること
