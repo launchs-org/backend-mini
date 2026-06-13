@@ -11,6 +11,7 @@ import (
 type ApplyHistoryRepository interface {
 	Create(ctx context.Context, tx *gorm.DB, history *models.ApplyHistory) error                                    // apply_history を作成する
 	UpdateStatus(ctx context.Context, tx *gorm.DB, history *models.ApplyHistory, status models.ApplyStatus) error  // apply_history のステータスを更新する
+	FindAllByDeploymentID(ctx context.Context, deploymentID string) ([]*models.ApplyHistory, error)                 // deploymentID に紐づく履歴一覧を取得する
 }
 
 // applyHistoryRepositoryImpl は ApplyHistoryRepository の GORM 実装
@@ -34,4 +35,11 @@ func (repo *applyHistoryRepositoryImpl) UpdateStatus(ctx context.Context, tx *go
 		"status":        status,               // ステータスを更新する
 		"error_message": history.ErrorMessage, // エラーメッセージを更新する
 	}).Error
+}
+
+// FindAllByDeploymentID は deploymentID に紐づく apply_history 一覧を applied_at 降順で取得する
+func (repo *applyHistoryRepositoryImpl) FindAllByDeploymentID(ctx context.Context, deploymentID string) ([]*models.ApplyHistory, error) {
+	var historyList []*models.ApplyHistory                                                                                     // 結果を格納するスライスを定義する
+	err := repo.db.WithContext(ctx).Where("deployment_id = ?", deploymentID).Order("applied_at DESC").Find(&historyList).Error // 新しい順に取得する
+	return historyList, err                                                                                                    // 結果とエラーを返す
 }
