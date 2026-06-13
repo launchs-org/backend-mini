@@ -9,10 +9,12 @@ import (
 
 // DeploymentRepository は deployments テーブルへのアクセスを定義するインターフェース
 type DeploymentRepository interface {
-	Create(ctx context.Context, deployment *models.Deployment) error                               // deployment を作成する
-	FindByID(ctx context.Context, deploymentID string) (*models.Deployment, error)                 // deployment を ID で取得する
-	FindAllByProjectID(ctx context.Context, projectID string) ([]models.Deployment, error)         // projectID に紐づく deployment 一覧を取得する
-	Save(ctx context.Context, deployment *models.Deployment) error                                 // deployment を保存する
+	Create(ctx context.Context, deployment *models.Deployment) error                                              // deployment を作成する
+	FindByID(ctx context.Context, deploymentID string) (*models.Deployment, error)                                // deployment を ID で取得する
+	FindByIDForUpdate(ctx context.Context, tx *gorm.DB, deploymentID string) (*models.Deployment, error)          // SELECT FOR UPDATE で deployment を取得する
+	FindAllByProjectID(ctx context.Context, projectID string) ([]models.Deployment, error)                        // projectID に紐づく deployment 一覧を取得する
+	Save(ctx context.Context, deployment *models.Deployment) error                                                // deployment を保存する
+	Updates(ctx context.Context, tx *gorm.DB, deployment *models.Deployment, values map[string]interface{}) error // deployment を map で部分更新する
 }
 
 // deploymentRepositoryImpl は DeploymentRepository の GORM 実装
@@ -48,9 +50,23 @@ func (repo *deploymentRepositoryImpl) FindAllByProjectID(ctx context.Context, pr
 	return deploymentList, nil // deployment 一覧を返す
 }
 
+// FindByIDForUpdate は SELECT FOR UPDATE で deploymentID に対応する deployment を取得する
+func (repo *deploymentRepositoryImpl) FindByIDForUpdate(ctx context.Context, tx *gorm.DB, deploymentID string) (*models.Deployment, error) {
+	var deploymentData models.Deployment                                                                                                              // deployment を格納する変数を定義する
+	if err := tx.WithContext(ctx).First(&deploymentData, "id = ?", deploymentID).Error; err != nil { // FOR UPDATE ロックを取得しながら取得する
+		return nil, err // 取得エラーを返す
+	}
+	return &deploymentData, nil // deployment を返す
+}
+
 // Save は deployment レコードを保存する
 func (repo *deploymentRepositoryImpl) Save(ctx context.Context, deployment *models.Deployment) error {
 	return repo.db.WithContext(ctx).Save(deployment).Error // db を使って保存する
+}
+
+// Updates は deployment レコードを map の値で部分更新する
+func (repo *deploymentRepositoryImpl) Updates(ctx context.Context, tx *gorm.DB, deployment *models.Deployment, values map[string]interface{}) error {
+	return tx.WithContext(ctx).Model(deployment).Updates(values).Error // tx を使って部分更新する
 }
 
 // ServiceRepository は services テーブルへのアクセスを定義するインターフェース
