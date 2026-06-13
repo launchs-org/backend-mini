@@ -20,7 +20,8 @@ var ErrAlreadyApplying = errors.New("already applying")
 
 // ApplyServiceInterface は apply サービスのインターフェース
 type ApplyServiceInterface interface {
-	Apply(ctx context.Context, userID string, deploymentID string) (*ApplyResult, error) // apply を実行する
+	Apply(ctx context.Context, userID string, deploymentID string) (*ApplyResult, error)                          // apply を実行する
+	ListApplyHistories(ctx context.Context, userID string, deploymentID string) ([]*models.ApplyHistory, error)   // apply 履歴一覧を取得する
 }
 
 // ApplyService は apply のコアロジックを実装するサービス
@@ -193,4 +194,24 @@ func (applyService *ApplyService) Apply(ctx context.Context, userID string, depl
 	})
 
 	return applyResult, err // 結果とエラーを返す
+}
+
+// ListApplyHistories は deploymentID に紐づく apply 履歴一覧を返す
+func (applyService *ApplyService) ListApplyHistories(ctx context.Context, userID string, deploymentID string) ([]*models.ApplyHistory, error) {
+	deploymentData, err := applyService.DeploymentRepo.FindByID(ctx, deploymentID) // deployment を取得する
+	if err != nil {
+		return nil, err // 取得エラーを返す
+	}
+
+	projectData, err := applyService.ProjectRepository.FindByIDNoTx(ctx, deploymentData.ProjectID) // project を取得する
+	if err != nil {
+		return nil, err // 取得エラーを返す
+	}
+
+	if projectData.UserID != userID { // 所有者でない場合は禁止エラーを返す
+		return nil, ErrForbidden
+	}
+
+	historyList, err := applyService.ApplyHistoryRepo.FindAllByDeploymentID(ctx, deploymentID) // 履歴一覧を取得する
+	return historyList, err                                                                     // 結果とエラーを返す
 }
