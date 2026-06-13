@@ -4,42 +4,23 @@
 ISSUE-035
 
 ## 概要
-apply 時に既に building 中のビルドがある場合、k8s Job を削除してキャンセルする。
+実行中のビルドをキャンセルするエンドポイントを実装する。k8s Jobを削除してDeploymentBuildのstatusをcanceledに更新する。
 
-## 実装手順
+## 変更ファイル一覧
 
-### `service/build.go` を作成
-
-```go
-package service
-
-func CancelRunningBuild(ctx context.Context, db *gorm.DB, k8sClient *kubernetes.Clientset, deploymentID string) error {
-    // building 中のビルドを探す
-    var build models.DeploymentBuild
-    err := db.Where("deployment_id = ? AND status = ?", deploymentID, models.BuildStatusBuilding).
-        First(&build).Error
-    if err != nil { return nil } // building 中がなければ何もしない
-
-    // k8s Job を削除
-    if build.K8sJobName != "" {
-        k8s.DeleteJob(ctx, k8sClient, build.K8sJobName)
-    }
-
-    // status を cancelled に更新
-    db.Model(&build).Update("status", models.BuildStatusCancelled)
-
-    // current_build_id は空のまま（次のビルドで上書き）
-    return nil
-}
-```
+- `app/src/service/build_service.go`（編集）
+    - **何を**: CancelBuildメソッドの追加。k8s Jobを削除してDeploymentBuild.statusをcanceledに更新する。already completed/failedのビルドに対してはエラーを返す。
+    - **なぜ**: ビルドキャンセルのビジネスロジックをハンドラーから分離するため
+- `app/src/handler/build_handler.go`（編集）
+    - **何を**: CancelBuildハンドラーの追加。
+    - **なぜ**: ビルドキャンセルのHTTPエントリーポイントが必要なため
+- `app/src/router/router.go`（編集）
+    - **何を**: DELETE /api/v1/builds/:idエンドポイントの登録。
+    - **なぜ**: ビルドキャンセルエンドポイントをルーターに接続するため
 
 ## テスト確認項目
 
-- [ ] building 中に apply を再度叩くと既存 Job が削除されること
-- [ ] キャンセルされたビルドの `status = cancelled` になること
-- [ ] building 中でない場合はキャンセル処理がスキップされること
-
-### repository 層テスト
-
-- [ ] `DeploymentBuildRepository.FindLatestByDeploymentID` で最新ビルドが取得できること
-- [ ] `DeploymentBuildRepository.UpdateStatus` で `status = cancelled` に更新できること
+- [ ] DELETE /api/v1/builds/:idでビルドがキャンセルされること
+- [ ] キャンセル後にk8s Jobが削除されること
+- [ ] キャンセル後にDeploymentBuild.statusがcanceledになること
+- [ ] 完了済みビルドのキャンセルで409が返ること

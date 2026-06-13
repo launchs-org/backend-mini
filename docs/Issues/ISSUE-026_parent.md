@@ -1,12 +1,10 @@
-# ISSUE-026 [Phase6] Volume / Volume Mount
+# ISSUE-026 [Phase6] ボリューム管理
 
 ## Sub Issues
-- [ ] ISSUE-027 Volume CRUD エンドポイント
-- [ ] ISSUE-028 Volume Mount CRUD エンドポイント
-- [ ] ISSUE-029 k8s PVC 生成・apply
-- [ ] ISSUE-030 apply サービスに Volume Mount 追加
+- [ ] ISSUE-027 ボリュームCRUD
+- [ ] ISSUE-028 ボリュームマウントCRUD
+- [ ] ISSUE-029 k8s PVC操作
+- [ ] ISSUE-030 Apply拡張（PVC対応）
 
 ## 完了条件
-- volume 作成で quota チェックが動くこと
-- apply 後に k8s PVC が作成されること
-- Deployment に volumeMounts が設定されること
+applyでk8s PersistentVolumeClaimが作成されDeploymentにマウントされること

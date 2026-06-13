@@ -1,46 +1,44 @@
-# ISSUE-050 deployment 作成・更新・apply 時の quota チェック
+# ISSUE-050 Quotaチェック実装
 
 ## 親 Issue
 ISSUE-049
 
 ## 概要
-`service/quota_service.go` に quota チェック関数を実装し、各 controller に組み込む。
-`user_id` は Echo コンテキストから `ctx.Get("UserID")` で取得する（`RequireAuth` ミドルウェアがセット済み）。
+deployment作成・更新・apply時のQuotaチェックをservice/quota_service.goに実装して各エンドポイントに組み込む。
 
-## チェック一覧
+## 変更ファイル一覧
 
-| チェック関数 | 呼び出し箇所 | エラー時レスポンス |
-|---|---|---|
-| `CheckProjectQuota(userID)` | `POST /projects` | 400 |
-| `CheckDeploymentQuota(userID)` | `POST /projects/:id/deployments` | 400 |
-| `CheckReplicasQuota(userID, replicas)` | `POST /projects/:id/deployments`、`PUT /deployments/:id`（replicas 変更時）、`POST /deployments/:id/apply` | 400 |
-| `CheckVolumeQuota(userID, sizeMB)` | `POST /projects/:id/volumes` | 400 |
-
-## service/quota_service.go の責務
-
-- `repository.UserQuotaRepository` を通じて `user_quotas` と使用量カウントを取得する
-- quota を超えていた場合は専用の sentinel error を返す（controller 側で 400 に変換）
-
-## エラーレスポンス例
-
-```json
-{ "error": "project quota exceeded", "code": "PROJECT_QUOTA_EXCEEDED" }
-{ "error": "deployment quota exceeded", "code": "DEPLOYMENT_QUOTA_EXCEEDED" }
-{ "error": "replicas exceed limit", "code": "REPLICAS_QUOTA_EXCEEDED" }
-{ "error": "volume storage quota exceeded", "code": "VOLUME_QUOTA_EXCEEDED" }
-```
+- `app/src/service/quota_service.go`（編集）
+    - **何を**: CheckProjectQuota・CheckDeploymentQuota・CheckReplicasQuota・CheckVolumeQuota関数の実装。UserQuotaRepositoryで上限値と現在の使用量を取得して比較する。超過時はsentinel error（ErrProjectQuotaExceeded等）を返す。
+    - **なぜ**: Quotaチェックロジックを集約してDRYに保つため
+- `app/src/repository/user_quota_repository.go`（編集）
+    - **何を**: CountProjects・CountDeployments・SumVolumeMB・CountReplicasメソッドの追加。ユーザーIDで絞り込んで現在の使用量をカウントする。
+    - **なぜ**: QuotaチェックのDB集計クエリをリポジトリ層に集約するため
+- `app/src/service/project_service.go`（編集）
+    - **何を**: CreateProjectメソッドの先頭にCheckProjectQuota呼び出しを追加。
+    - **なぜ**: プロジェクト作成前にQuotaを検証するため
+- `app/src/service/deployment_service.go`（編集）
+    - **何を**: CreateDeploymentメソッドの先頭にCheckDeploymentQuota呼び出しを追加。UpdateDeploymentとApplyDeploymentにCheckReplicasQuota呼び出しを追加。
+    - **なぜ**: デプロイメント作成・更新・apply前にQuotaを検証するため
+- `app/src/service/volume_service.go`（編集）
+    - **何を**: CreateVolumeメソッドの先頭にCheckVolumeQuota呼び出しを追加。
+    - **なぜ**: ボリューム作成前にQuotaを検証するため
+- `app/src/handler/project_handler.go`（編集）
+    - **何を**: CreateProjectハンドラーでErrProjectQuotaExceededをキャッチして400レスポンスを返す処理の追加。
+    - **なぜ**: Quotaエラーを適切なHTTPステータスに変換するため
+- `app/src/handler/deployment_handler.go`（編集）
+    - **何を**: CreateDeployment・UpdateDeployment・ApplyDeploymentハンドラーでQuota系エラーをキャッチして400レスポンスを返す処理の追加。
+    - **なぜ**: Quotaエラーを適切なHTTPステータスに変換するため
 
 ## テスト確認項目
 
-- [ ] `max_projects` を超える project 作成で 400 になること
-- [ ] `max_deployments` を超える deployment 作成で 400 になること
-- [ ] `max_replicas_per_deployment` を超える replicas 設定で 400 になること
-- [ ] `max_volume_mb` を超える volume 作成で 400 になること
-- [ ] quota 更新後に新しい制限が即時反映されること
-
+- [ ] max_projectsを超えるプロジェクト作成で400が返ること
+- [ ] max_deploymentsを超えるデプロイメント作成で400が返ること
+- [ ] max_replicas_per_deploymentを超えるreplicas設定で400が返ること
+- [ ] max_volume_mbを超えるボリューム作成で400が返ること
+- [ ] Quota更新後に新しい制限が即時反映されること
 ### repository 層テスト
 
-- [ ] `UserQuotaRepository.CountProjects` でプロジェクト数が正しくカウントされること
-- [ ] `UserQuotaRepository.CountDeployments` でデプロイメント数が正しくカウントされること
-- [ ] `UserQuotaRepository.SumVolumeMB` でボリューム合計が正しく集計されること
-- [ ] `UserQuotaRepository.Update` で quota 更新後に新しい制限値が取得できること
+- [ ] UserQuotaRepository.CountProjectsでプロジェクト数が正しくカウントされること
+- [ ] UserQuotaRepository.CountDeploymentsでデプロイメント数が正しくカウントされること
+- [ ] UserQuotaRepository.SumVolumeMBでボリューム合計が正しく集計されること

@@ -1,159 +1,51 @@
-# ISSUE-008 Project CRUD
+# ISSUE-008 プロジェクトCRUD
 
 ## 親 Issue
 ISSUE-005
 
 ## 概要
-Project の作成・取得・更新・削除を実装する。作成時に k8s namespace も作成する。
+プロジェクトのCRUDエンドポイントを実装する。作成時はHarborプロジェクト・Robotアカウント作成とk8s Namespace作成をトランザクション的に行う。削除時はHarborとk8sリソースを順次削除する。
 
-## 実装手順
+## 変更ファイル一覧
 
-### 1. `service/project.go` を作成
+- `app/src/models/project.go`（編集）
+    - **何を**: Projectモデルの定義。Status定数（provisioning/active/deleting）、NamespaceフィールドとUserIDフィールドを持つ。
+    - **なぜ**: プロジェクトエンティティのDB表現を定義するため
 
-```go
-package service
+- `app/src/repository/project_repository.go`（編集）
+    - **何を**: ProjectRepositoryインターフェースと実装。Create・FindByID・FindAllByUserID・UpdateStatus・Save・Deleteメソッドを持つ。トランザクション引数（tx *gorm.DB）を受け取る。
+    - **なぜ**: プロジェクトのDB操作を抽象化し、トランザクション管理をServiceに委譲するため
 
-import (
-    "context"
-    "fmt"
-    "app/k8s"
-    "app/models"
-    "gorm.io/gorm"
-    k8sclient "k8s.io/client-go/kubernetes"
-)
+- `app/src/service/project_service.go`（編集）
+    - **何を**: ProjectServiceインターフェースと実装。CreateProjectでHarbor連携・Namespace作成を含むトランザクション処理。DeleteProjectでHarborとk8sリソースの削除。ListProjects・GetProject・UpdateProjectのCRUD。
+    - **なぜ**: プロジェクト作成の複合オペレーション（Harbor + k8s + DB）をサービス層で調整するため
 
-type ProjectService struct {
-    DB  *gorm.DB
-    K8s *k8sclient.Clientset
-}
+- `app/src/handler/project_handler.go`（編集）
+    - **何を**: ListProjects・CreateProject・GetProject・UpdateProject・DeleteProjectハンドラーの実装。
+    - **なぜ**: HTTPリクエストの受け取りとレスポンス返却を担う層が必要なため
 
-func (s *ProjectService) Create(ctx context.Context, accountID, name string) (*models.Project, error) {
-    // namespace 名 = project 名（lowercase）
-    namespace := name
+- `app/src/router/router.go`（編集）
+    - **何を**: GET/POST /api/v1/projects、GET/PUT/DELETE /api/v1/projects/:idエンドポイントの登録。
+    - **なぜ**: プロジェクトCRUDエンドポイントをルーターに接続するため
 
-    project := models.Project{
-        AccountID: accountID,
-        Name:      name,
-        Namespace: namespace,
-        Status:    models.ProjectStatusProvisioning,
-    }
-
-    if err := s.DB.Create(&project).Error; err != nil {
-        return nil, fmt.Errorf("db insert: %w", err)
-    }
-
-    // k8s namespace 作成
-    if err := k8s.CreateNamespace(ctx, s.K8s, namespace); err != nil {
-        // namespace 作成失敗でも DB レコードは残す（Watcher or リトライで対応）
-        return &project, fmt.Errorf("k8s namespace: %w", err)
-    }
-
-    // namespace 作成成功 → active に更新
-    s.DB.Model(&project).Update("status", models.ProjectStatusActive)
-    project.Status = models.ProjectStatusActive
-
-    return &project, nil
-}
-
-func (s *ProjectService) Delete(ctx context.Context, id string) error {
-    var project models.Project
-    if err := s.DB.First(&project, "id = ?", id).Error; err != nil {
-        return err
-    }
-
-    // deleting に更新（実際の削除は Phase10 で完成）
-    return s.DB.Model(&project).Update("status", models.ProjectStatusDeleting).Error
-}
-```
-
-### 2. `handler/project.go` を作成
-
-```go
-package handler
-
-import (
-    "net/http"
-    "github.com/labstack/echo/v4"
-    "app/models"
-    "app/service"
-)
-
-func (h *Handler) ListProjects(c echo.Context) error {
-    var projects []models.Project
-    h.DB.Find(&projects)
-    return c.JSON(http.StatusOK, projects)
-}
-
-func (h *Handler) CreateProject(c echo.Context) error {
-    var req struct {
-        AccountID string `json:"account_id" validate:"required"`
-        Name      string `json:"name"       validate:"required"`
-    }
-    if err := c.Bind(&req); err != nil {
-        return echo.ErrBadRequest
-    }
-
-    svc := &service.ProjectService{DB: h.DB, K8s: h.K8s}
-    project, err := svc.Create(c.Request().Context(), req.AccountID, req.Name)
-    if err != nil {
-        return echo.ErrInternalServerError
-    }
-    return c.JSON(http.StatusCreated, project)
-}
-
-func (h *Handler) GetProject(c echo.Context) error {
-    var project models.Project
-    if err := h.DB.First(&project, "id = ?", c.Param("id")).Error; err != nil {
-        return echo.ErrNotFound
-    }
-    return c.JSON(http.StatusOK, project)
-}
-
-func (h *Handler) UpdateProject(c echo.Context) error {
-    var project models.Project
-    if err := h.DB.First(&project, "id = ?", c.Param("id")).Error; err != nil {
-        return echo.ErrNotFound
-    }
-
-    var req struct {
-        Name *string `json:"name"`
-    }
-    if err := c.Bind(&req); err != nil {
-        return echo.ErrBadRequest
-    }
-    if req.Name != nil {
-        project.Name = *req.Name
-    }
-
-    h.DB.Save(&project)
-    return c.JSON(http.StatusOK, project)
-}
-
-func (h *Handler) DeleteProject(c echo.Context) error {
-    svc := &service.ProjectService{DB: h.DB, K8s: h.K8s}
-    if err := svc.Delete(c.Request().Context(), c.Param("id")); err != nil {
-        return echo.ErrNotFound
-    }
-    return c.NoContent(http.StatusAccepted)
-}
-```
-
-### 3. ルーティング登録
-
-```go
-api.GET("/projects",     h.ListProjects)
-api.POST("/projects",    h.CreateProject)
-api.GET("/projects/:id", h.GetProject)
-api.PUT("/projects/:id", h.UpdateProject)
-api.DELETE("/projects/:id", h.DeleteProject)
-```
+- `app/src/main.go`（編集）
+    - **何を**: ProjectServiceとProjectHandlerのDI組み立てとNewRouter()への注入。
+    - **なぜ**: 依存関係をエントリーポイントで組み立てるため
 
 ## テスト確認項目
 
-- [ ] `POST /projects` で project が作成されること
-- [ ] `POST /projects` 後に k8s namespace が作成されること
-- [ ] `POST /projects` 後に `status = active` になること
-- [ ] 同名の project を作成すると 500（UNIQUE 制約違反）になること
-- [ ] `GET /projects/:id` で詳細が取得できること
-- [ ] `PUT /projects/:id` で name が更新できること
-- [ ] `DELETE /projects/:id` で `status = deleting` になること
+- [ ] POST /api/v1/projectsでプロジェクトが作成されること
+- [ ] 作成時にHarborプロジェクトとRobotアカウントが作成されること
+- [ ] 作成時にk8s Namespaceが作成されること
+- [ ] GET /api/v1/projectsで自分のプロジェクト一覧が取得できること
+- [ ] GET /api/v1/projects/:idでプロジェクトが取得できること
+- [ ] PUT /api/v1/projects/:idでプロジェクト名が更新できること
+- [ ] DELETE /api/v1/projects/:idでHarborとk8sリソースが削除されること
+- [ ] 他ユーザーのプロジェクトにアクセスすると404が返ること
+
+### repository 層テスト
+
+- [ ] ProjectRepository.Createでプロジェクトが作成できること
+- [ ] ProjectRepository.FindByIDでプロジェクトが取得できること
+- [ ] ProjectRepository.FindAllByUserIDでユーザーのプロジェクト一覧が取得できること
+- [ ] ProjectRepository.UpdateStatusでstatusが更新できること

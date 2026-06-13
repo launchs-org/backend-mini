@@ -1,56 +1,35 @@
-# ISSUE-042 Webhook 登録・削除 API
+# ISSUE-042 Webhook管理エンドポイント
 
 ## 親 Issue
 ISSUE-041
 
-## 実装手順
+## 概要
+GitHub Webhookの登録・取得・削除エンドポイントを実装する。WebhookシークレットをDBに保存して受信時の署名検証に使用する。
 
-### `handler/webhook.go` を作成
+## 変更ファイル一覧
 
-```go
-func (h *Handler) CreateWebhook(c echo.Context) error {
-    deploymentID := c.Param("id")
-
-    // 既に存在する場合は 409
-    var existing models.DeploymentWebhook
-    if err := h.DB.Where("deployment_id = ?", deploymentID).First(&existing).Error; err == nil {
-        return c.JSON(http.StatusConflict, map[string]string{"error": "webhook already exists"})
-    }
-
-    // シークレットを自動生成（32バイトのランダム文字列）
-    secretBytes := make([]byte, 32)
-    rand.Read(secretBytes)
-    secret := "whsec_" + hex.EncodeToString(secretBytes)
-
-    webhook := models.DeploymentWebhook{
-        DeploymentID: deploymentID,
-        Secret:       secret,
-    }
-    h.DB.Create(&webhook)
-
-    webhookURL := fmt.Sprintf("https://api.launchs.org/webhooks/%s/github", deploymentID)
-    return c.JSON(http.StatusCreated, map[string]string{
-        "id":          webhook.ID,
-        "webhook_url": webhookURL,
-        "secret":      secret, // 初回のみ返す
-    })
-}
-```
-
-### ルーティング登録
-
-```go
-api.GET("/deployments/:id/webhook",    h.GetWebhook)
-api.POST("/deployments/:id/webhook",   h.CreateWebhook)
-api.DELETE("/deployments/:id/webhook", h.DeleteWebhook)
-```
+- `app/src/models/deployment_webhook.go`（編集）
+    - **何を**: DeploymentWebhookモデルの定義。DeploymentIDへの外部キー、secret（署名検証用）、github_repo_url、is_activeフィールドを持つ。
+    - **なぜ**: Webhook設定とシークレットをDBで安全に管理するため
+- `app/src/repository/webhook_repository.go`（新規作成）
+    - **何を**: WebhookRepositoryインターフェースと実装。Create・FindByDeploymentID・Deleteメソッドを持つ。
+    - **なぜ**: Webhook設定のDB操作を抽象化するため
+- `app/src/service/webhook_service.go`（新規作成）
+    - **何を**: WebhookServiceインターフェースと実装。CreateWebhook（シークレット自動生成）・GetWebhook・DeleteWebhookのCRUD。
+    - **なぜ**: Webhook管理のビジネスロジックをハンドラーから分離するため
+- `app/src/handler/webhook_handler.go`（新規作成）
+    - **何を**: CreateWebhook・GetWebhook・DeleteWebhookハンドラーの実装。
+    - **なぜ**: Webhook管理のHTTPエントリーポイントが必要なため
+- `app/src/router/router.go`（編集）
+    - **何を**: GET/POST /api/v1/deployments/:id/webhooks、DELETE /api/v1/webhooks/:idエンドポイントの登録。
+    - **なぜ**: Webhook管理エンドポイントをルーターに接続するため
 
 ## テスト確認項目
 
-- [ ] Webhook 作成でシークレットが返ること
-- [ ] 同じ deployment に2回 POST すると 409 になること
-
+- [ ] POST /api/v1/deployments/:id/webhooksでWebhookが作成されること
+- [ ] 作成時にシークレットが自動生成されること
+- [ ] GET /api/v1/deployments/:id/webhooksでWebhook設定が取得できること
+- [ ] DELETE /api/v1/webhooks/:idでWebhookが削除されること
 ### repository 層テスト
 
-- [ ] `WebhookRepository.Create` でシークレットがハッシュ化されて DB に保存されること
-- [ ] 同一 deployment_id で UNIQUE 制約エラーが返ること
+- [ ] WebhookRepository.FindByDeploymentIDでWebhook設定が取得できること

@@ -1,145 +1,49 @@
-# ISSUE-010 Deployment CRUD
+# ISSUE-010 デプロイメントCRUD
 
 ## 親 Issue
 ISSUE-009
 
 ## 概要
-Deployment の POST / GET / PUT / DELETE を実装する。
-POST・PUT ではリクエストのフィールドを `pending_***` カラムに書き込む。
+デプロイメントのCRUDエンドポイントを実装する。更新はpending_*フィールドへの書き込みのみで、実際のk8s反映はapply時に行う。作成時にServiceレコードも同時生成する。
 
-## 実装手順
+## 変更ファイル一覧
 
-### 1. `handler/deployment.go` を作成
+- `app/src/models/deployment.go`（編集）
+    - **何を**: Deploymentモデルの定義。Status定数（pending/running/failed/deleting）、AppStatus定数（pending/building/deploying/running/error）、デプロイタイプ定数（image_url/dockerfile/railpack）。現在値フィールドとpending_*フィールドの両方を持つ。
+    - **なぜ**: applyまでステージングされた変更を保持するpending_*パターンを実現するため
 
-#### POST /projects/:id/deployments
+- `app/src/models/service.go`（編集）
+    - **何を**: Serviceモデルの定義。deploymentと1対1で紐づく。port・target_portフィールドを持つ。
+    - **なぜ**: k8s Serviceの設定をDBで管理するため
 
-```go
-func (h *Handler) CreateDeployment(c echo.Context) error {
-    projectID := c.Param("id")
+- `app/src/repository/deployment_repository.go`（編集）
+    - **何を**: DeploymentRepositoryとServiceRepositoryのインターフェースと実装。DeploymentRepositoryはCreate・FindByID・FindByIDForUpdate（SELECT FOR UPDATE）・FindAllByProjectID・Save・Updatesメソッドを持つ。
+    - **なぜ**: デプロイメントのDB操作を抽象化し、apply時のロック取得を可能にするため
 
-    var req struct {
-        Name           string `json:"name"`
-        Type           string `json:"type"` // image_url / dockerfile / railpack
-        // image_url 専用
-        ImageURL       string `json:"image_url"`
-        // GitHub 共通
-        GithubRepoURL        string `json:"github_repo_url"`
-        GithubBranch         string `json:"github_branch"`
-        GithubCommitSHA      string `json:"github_commit_sha"`
-        GithubRepoDirectory  string `json:"build_directory"`
-        // dockerfile 専用
-        DockerfilePath string `json:"dockerfile_path"`
-        // デプロイ設定
-        InstanceSize   string `json:"instance_size"`
-        Replicas       int32  `json:"replicas"`
-    }
-    if err := c.Bind(&req); err != nil {
-        return echo.ErrBadRequest
-    }
+- `app/src/service/deployment_service.go`（編集）
+    - **何を**: DeploymentServiceインターフェースと実装。ListDeployments・CreateDeployment（Serviceレコードも同時生成）・GetDeployment・UpdateDeployment（pending_*フィールドのみ更新）・DeleteDeployment（statusをdeletingに変更）。
+    - **なぜ**: デプロイメントのビジネスロジックをハンドラーから分離するため
 
-    // デフォルト値
-    if req.InstanceSize == "" { req.InstanceSize = "small" }
-    if req.Replicas == 0 { req.Replicas = 1 }
-    if req.DockerfilePath == "" { req.DockerfilePath = "./Dockerfile" }
-    if req.GithubRepoDirectory == "" { req.GithubRepoDirectory = "./" }
+- `app/src/handler/deployment_handler.go`（編集）
+    - **何を**: ListDeployments・CreateDeployment・GetDeployment・UpdateDeployment・DeleteDeploymentハンドラーの実装。
+    - **なぜ**: HTTPリクエストの受け取りとレスポンス返却を担う層が必要なため
 
-    d := models.Deployment{
-        ProjectID: projectID,
-        Name:      req.Name,
-        Type:      models.DeploymentType(req.Type),
-        Status:    models.DeploymentStatusPending,
-        AppStatus: models.AppStatusPending,
-        // 全て pending_*** に入れる
-        PendingImageURL:             req.ImageURL,
-        PendingGithubRepoURL:        req.GithubRepoURL,
-        PendingGithubBranch:         req.GithubBranch,
-        PendingGithubCommitSHA:      req.GithubCommitSHA,
-        PendingGithubRepoDirectory:  req.GithubRepoDirectory,
-        PendingDockerfilePath:       req.DockerfilePath,
-        PendingInstanceSize:         req.InstanceSize,
-        PendingReplicas:             req.Replicas,
-    }
-
-    if err := h.DB.Create(&d).Error; err != nil {
-        return echo.ErrInternalServerError
-    }
-
-    // Service レコードも同時に作成（ports は空）
-    svc := models.Service{
-        DeploymentID: d.ID,
-        Status:       models.ServiceStatusPending,
-    }
-    h.DB.Create(&svc)
-
-    return c.JSON(http.StatusCreated, d)
-}
-```
-
-#### PUT /deployments/:id
-
-```go
-func (h *Handler) UpdateDeployment(c echo.Context) error {
-    var d models.Deployment
-    if err := h.DB.First(&d, "id = ?", c.Param("id")).Error; err != nil {
-        return echo.ErrNotFound
-    }
-
-    var req struct {
-        ImageURL              *string `json:"image_url"`
-        GithubRepoURL         *string `json:"github_repo_url"`
-        GithubBranch          *string `json:"github_branch"`
-        GithubCommitSHA       *string `json:"github_commit_sha"`
-        GithubRepoDirectory   *string `json:"build_directory"`
-        DockerfilePath        *string `json:"dockerfile_path"`
-        InstanceSize          *string `json:"instance_size"`
-        Replicas              *int32  `json:"replicas"`
-        Command               []string `json:"command"`
-        Args                  []string `json:"args"`
-    }
-    if err := c.Bind(&req); err != nil {
-        return echo.ErrBadRequest
-    }
-
-    // 送られてきたフィールドのみ pending_*** に書き込む
-    if req.ImageURL != nil             { d.PendingImageURL = *req.ImageURL }
-    if req.GithubRepoURL != nil        { d.PendingGithubRepoURL = *req.GithubRepoURL }
-    if req.GithubBranch != nil         { d.PendingGithubBranch = *req.GithubBranch }
-    if req.GithubCommitSHA != nil      { d.PendingGithubCommitSHA = *req.GithubCommitSHA }
-    if req.GithubRepoDirectory != nil  { d.PendingGithubRepoDirectory = *req.GithubRepoDirectory }
-    if req.DockerfilePath != nil       { d.PendingDockerfilePath = *req.DockerfilePath }
-    if req.InstanceSize != nil         { d.PendingInstanceSize = *req.InstanceSize }
-    if req.Replicas != nil             { d.PendingReplicas = *req.Replicas }
-    if req.Command != nil              { d.PendingCommand = req.Command }
-    if req.Args != nil                 { d.PendingArgs = req.Args }
-
-    h.DB.Save(&d)
-    return c.JSON(http.StatusOK, d)
-}
-```
-
-### 2. ルーティング登録
-
-```go
-api.GET("/projects/:id/deployments",  h.ListDeployments)
-api.POST("/projects/:id/deployments", h.CreateDeployment)
-api.GET("/deployments/:id",           h.GetDeployment)
-api.PUT("/deployments/:id",           h.UpdateDeployment)
-api.DELETE("/deployments/:id",        h.DeleteDeployment)
-```
+- `app/src/router/router.go`（編集）
+    - **何を**: GET/POST /api/v1/projects/:id/deployments、GET/PUT/DELETE /api/v1/deployments/:idエンドポイントの登録。
+    - **なぜ**: デプロイメントCRUDエンドポイントをルーターに接続するため
 
 ## テスト確認項目
 
-- [ ] `POST /deployments` で `status = pending`、`app_status = pending` で作成されること
-- [ ] `POST /deployments` でリクエストの値が全て `pending_***` に入ること
-- [ ] `POST /deployments` で Service レコードも同時に作成されること
-- [ ] `PUT /deployments` で送ったフィールドのみ `pending_***` が更新されること
-- [ ] `PUT /deployments` で送らなかったフィールドは変化しないこと
-- [ ] `type` カラムは PUT で変更できないこと
-- [ ] `DELETE /deployments/:id` で `status = deleting` になること
+- [ ] POST /api/v1/projects/:id/deploymentsでデプロイメントが作成されること
+- [ ] 作成時にServiceレコードも同時生成されること
+- [ ] GET /api/v1/deployments/:idでデプロイメントが取得できること
+- [ ] PUT /api/v1/deployments/:idでpending_*フィールドが更新されること
+- [ ] DELETE /api/v1/deployments/:idでstatusがdeletingになること
+- [ ] 他プロジェクトのデプロイメントにアクセスすると404が返ること
 
 ### repository 層テスト
 
-- [ ] `DeploymentRepository.Create` でレコードが DB に保存されること
-- [ ] `DeploymentRepository.FindByID` で存在しない ID を渡すと `ErrRecordNotFound` が返ること
-- [ ] `DeploymentRepository.Save` で `pending_***` フィールドが正しく更新されること
-- [ ] `DeploymentRepository.Delete` でレコードが DB から削除されること
+- [ ] DeploymentRepository.Createでデプロイメントが作成できること
+- [ ] DeploymentRepository.FindByIDでデプロイメントが取得できること
+- [ ] DeploymentRepository.FindByIDForUpdateでSELECT FOR UPDATEが発行されること
+- [ ] DeploymentRepository.Updatesでpendingフィールドのみが更新されること

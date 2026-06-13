@@ -1,62 +1,20 @@
-# ISSUE-025 apply サービスに env 重複チェック・ConfigMap/Secret 追加
+# ISSUE-025 Apply拡張（環境変数適用・重複チェック）
 
 ## 親 Issue
 ISSUE-021
 
 ## 概要
-apply 時に env_var の実効キー重複チェックを行い、ConfigMap/Secret も k8s に apply する。
-apply 後に env_var_mounts.status を applied に更新する。
+ApplyサービスにConfigMap・Secretの同期処理を追加する。apply時に重複するキー名が存在する場合はエラーとする。
 
-## 実装手順
+## 変更ファイル一覧
 
-### `service/apply.go` に追加
-
-```go
-// 1. env_var 実効キーの重複チェック
-var mounts []models.EnvVarMount
-tx.Preload("EnvVar").
-    Where("deployment_id = ? AND status != ?", deploymentID, "deleting").
-    Find(&mounts)
-
-seen := map[string]bool{}
-for _, m := range mounts {
-    effectiveKey := m.OverrideKey
-    if effectiveKey == "" { effectiveKey = m.EnvVar.Key }
-    if seen[effectiveKey] {
-        return fmt.Errorf("duplicate env key: %s", effectiveKey)
-    }
-    seen[effectiveKey] = true
-}
-
-// 2. ConfigMap / Secret を apply
-configData, secretData := buildEnvData(mounts)
-
-if len(configData) > 0 {
-    k8s.ApplyConfigMap(ctx, s.K8s, project.Namespace, d.Name+"-env", configData)
-}
-if len(secretData) > 0 {
-    k8s.ApplySecret(ctx, s.K8s, project.Namespace, d.Name+"-secret", secretData)
-}
-
-// 3. Deployment manifest に envFrom を追加
-// manifest/generator.go の GenerateDeployment を拡張して
-// ConfigMap/Secret の envFrom を Deployment spec に追加する
-
-// 4. apply 後に env_var_mounts.status = applied に更新
-tx.Model(&models.EnvVarMount{}).
-    Where("deployment_id = ? AND status = ?", deploymentID, models.EnvVarMountStatusPending).
-    Update("status", models.EnvVarMountStatusApplied)
-```
+- `app/src/service/apply.go`（編集）
+    - **何を**: Applyメソッドの拡張。EnvVarMountsを取得してマウントされた環境変数を解決。is_secretによってConfigMapとSecretに分類。apply前にキー名重複チェックを実行（重複があればApplyHistoryをfailedにしてエラーを返す）。ConfigMapとSecretをk8sに適用。Deploymentのenv定義にConfigMap/Secretのenvfromを追加。
+    - **なぜ**: k8sのDeploymentに環境変数を注入するためにConfigMap/Secretをk8s側で管理する必要があるため
 
 ## テスト確認項目
 
-- [ ] 実効キーが重複する mount を持った状態で apply すると 400 になること
-- [ ] apply 後に k8s ConfigMap が作成されること
-- [ ] apply 後に k8s Secret が作成されること
-- [ ] apply 後に env_var_mounts.status が applied になること
-- [ ] k8s Deployment の envFrom に ConfigMap/Secret が含まれること
-
-### repository 層テスト
-
-- [ ] `EnvVarMountRepository.FindAllByDeploymentID` で全マウントが取得できること
-- [ ] `EnvVarMountRepository.UpdateStatus` で `status = applied` に一括更新できること
+- [ ] applyでConfigMapとSecretが作成・更新されること
+- [ ] Deploymentのenvにマウント設定が反映されること
+- [ ] 重複キーが存在する場合にapplyがエラーになること
+- [ ] ConfigMapのみ・Secretのみの場合も正常にapplyできること

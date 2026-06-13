@@ -1,74 +1,40 @@
-# ISSUE-028 Volume Mount CRUD エンドポイント
+# ISSUE-028 ボリュームマウントCRUD
 
 ## 親 Issue
 ISSUE-026
 
-## 実装手順
+## 概要
+ボリュームをデプロイメントにマウントする設定のCRUDエンドポイントを実装する。マウントパスを指定してapply時にk8sのvolumeMountsとして反映される。
 
-### 1. `handler/volume_mount.go` を作成
+## 変更ファイル一覧
 
-```go
-func (h *Handler) CreateVolumeMount(c echo.Context) error {
-    deploymentID := c.Param("id")
-    var req struct {
-        VolumeID  string `json:"volume_id"`
-        MountPath string `json:"mount_path"`
-    }
-    if err := c.Bind(&req); err != nil { return echo.ErrBadRequest }
+- `app/src/models/volume_mount.go`（編集）
+    - **何を**: VolumeMountモデルの定義。DeploymentIDとVolumeIDへの外部キー、mount_pathフィールドを持つ。
+    - **なぜ**: ボリュームとデプロイメントの多対多関係をDBで管理するため
 
-    var count int64
-    h.DB.Model(&models.VolumeMount{}).
-        Where("volume_id = ? AND deployment_id = ?", req.VolumeID, deploymentID).
-        Count(&count)
-    if count > 0 {
-        return c.JSON(http.StatusConflict, map[string]string{
-            "error": "volume already mounted", "code": "ALREADY_MOUNTED",
-        })
-    }
+- `app/src/repository/volume_mount_repository.go`（新規作成）
+    - **何を**: VolumeMountRepositoryインターフェースと実装。Create・FindAllByDeploymentID・Deleteメソッドを持つ。
+    - **なぜ**: ボリュームマウント設定のDB操作を抽象化するため
 
-    mount := models.VolumeMount{
-        VolumeID:     req.VolumeID,
-        DeploymentID: deploymentID,
-        MountPath:    req.MountPath,
-        Status:       models.VolumeMountStatusPending,
-    }
-    h.DB.Create(&mount)
-    return c.JSON(http.StatusCreated, mount)
-}
+- `app/src/service/volume_service.go`（編集）
+    - **何を**: ListVolumeMounts・CreateVolumeMount・DeleteVolumeMountメソッドの追加。同一DeploymentIDで同一mount_pathの重複を拒否する。
+    - **なぜ**: ボリュームマウント管理のビジネスロジックをハンドラーから分離するため
 
-func (h *Handler) UpdateVolumeMount(c echo.Context) error {
-    var mount models.VolumeMount
-    if err := h.DB.First(&mount, "id = ?", c.Param("id")).Error; err != nil {
-        return echo.ErrNotFound
-    }
-    var req struct {
-        MountPath *string `json:"mount_path"`
-    }
-    if err := c.Bind(&req); err != nil { return echo.ErrBadRequest }
-    if req.MountPath != nil {
-        mount.PendingMountPath = *req.MountPath
-        h.DB.Save(&mount)
-    }
-    return c.JSON(http.StatusOK, mount)
-}
-```
+- `app/src/handler/volume_handler.go`（編集）
+    - **何を**: ListVolumeMounts・CreateVolumeMount・DeleteVolumeMountハンドラーの追加。
+    - **なぜ**: ボリュームマウント設定管理のHTTPエントリーポイントが必要なため
 
-### 2. ルーティング登録
-
-```go
-api.GET("/deployments/:id/volume-mounts",  h.ListVolumeMounts)
-api.POST("/deployments/:id/volume-mounts", h.CreateVolumeMount)
-api.PUT("/volume-mounts/:id",              h.UpdateVolumeMount)
-api.DELETE("/volume-mounts/:id",           h.DeleteVolumeMount)
-```
+- `app/src/router/router.go`（編集）
+    - **何を**: GET/POST /api/v1/deployments/:id/volume-mounts、DELETE /api/v1/volume-mounts/:idエンドポイントの登録。
+    - **なぜ**: ボリュームマウントエンドポイントをルーターに接続するため
 
 ## テスト確認項目
 
-- [ ] 同じ volume を同じ deployment に2回 mount すると 409 になること
-- [ ] `PUT /volume-mounts/:id` で `mount_path` を送ると `pending_mount_path` に入ること
+- [ ] POST /api/v1/deployments/:id/volume-mountsでマウント設定が作成できること
+- [ ] GET /api/v1/deployments/:id/volume-mountsでマウント設定一覧が取得できること
+- [ ] DELETE /api/v1/volume-mounts/:idでマウント設定が削除できること
+- [ ] 同一DeploymentIDで同一mount_pathの重複が拒否されること
 
 ### repository 層テスト
 
-- [ ] `VolumeMountRepository.Create` でレコードが DB に保存されること
-- [ ] 同一 deployment + volume_id の組み合わせで UNIQUE 制約エラーが返ること
-- [ ] `VolumeMountRepository.Save` で `pending_mount_path` が更新されること
+- [ ] VolumeMountRepository.FindAllByDeploymentIDでマウント設定一覧が取得できること

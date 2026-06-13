@@ -1,109 +1,40 @@
-# ISSUE-023 Env Var Mount CRUD エンドポイント
+# ISSUE-023 環境変数マウントCRUD
 
 ## 親 Issue
 ISSUE-021
 
 ## 概要
-env_var を deployment にマウント・アンマウントするエンドポイントを実装する。
-override_key の設定と pending_override_key への書き込みを行う。
+環境変数をデプロイメントにマウントする設定のCRUDエンドポイントを実装する。マウント設定はapply時にk8sのcontainer.envまたはenvFromとして反映される。
 
-## 実装手順
+## 変更ファイル一覧
 
-### 1. `handler/env_var_mount.go` を作成
+- `app/src/models/env_var_mount.go`（編集）
+    - **何を**: EnvVarMountモデルの定義。DeploymentIDとEnvVarIDへの外部キー、mount_keyフィールド（k8s側の環境変数名）を持つ。
+    - **なぜ**: 環境変数とデプロイメントの多対多関係をDBで管理するため
 
-```go
-package handler
+- `app/src/repository/env_var_mount_repository.go`（新規作成）
+    - **何を**: EnvVarMountRepositoryインターフェースと実装。Create・FindAllByDeploymentID・Deleteメソッドを持つ。
+    - **なぜ**: マウント設定のDB操作を抽象化するため
 
-func (h *Handler) ListEnvMounts(c echo.Context) error {
-    deploymentID := c.Param("id")
-    var mounts []models.EnvVarMount
-    h.DB.Preload("EnvVar").
-        Where("deployment_id = ? AND status != ?", deploymentID, "deleting").
-        Find(&mounts)
-    return c.JSON(http.StatusOK, mounts)
-}
+- `app/src/service/env_var_service.go`（編集）
+    - **何を**: ListEnvVarMounts・CreateEnvVarMount・DeleteEnvVarMountメソッドの追加。同一DeploymentIDで同一EnvVarIDの重複マウントを拒否する。
+    - **なぜ**: 環境変数マウント管理のビジネスロジックをハンドラーから分離するため
 
-func (h *Handler) CreateEnvMount(c echo.Context) error {
-    deploymentID := c.Param("id")
-    var req struct {
-        EnvVarID    string  `json:"env_var_id"`
-        OverrideKey *string `json:"override_key"`
-    }
-    if err := c.Bind(&req); err != nil {
-        return echo.ErrBadRequest
-    }
+- `app/src/handler/env_var_handler.go`（編集）
+    - **何を**: ListEnvVarMounts・CreateEnvVarMount・DeleteEnvVarMountハンドラーの追加。
+    - **なぜ**: マウント設定管理のHTTPエントリーポイントが必要なため
 
-    // 重複チェック
-    var count int64
-    h.DB.Model(&models.EnvVarMount{}).
-        Where("env_var_id = ? AND deployment_id = ?", req.EnvVarID, deploymentID).
-        Count(&count)
-    if count > 0 {
-        return c.JSON(http.StatusConflict, map[string]string{
-            "error": "env_var already mounted",
-            "code":  "ALREADY_MOUNTED",
-        })
-    }
-
-    overrideKey := ""
-    if req.OverrideKey != nil { overrideKey = *req.OverrideKey }
-
-    mount := models.EnvVarMount{
-        EnvVarID:     req.EnvVarID,
-        DeploymentID: deploymentID,
-        OverrideKey:  overrideKey,
-        Status:       models.EnvVarMountStatusPending,
-    }
-    h.DB.Create(&mount)
-    return c.JSON(http.StatusCreated, mount)
-}
-
-func (h *Handler) UpdateEnvMount(c echo.Context) error {
-    var mount models.EnvVarMount
-    if err := h.DB.First(&mount, "id = ?", c.Param("id")).Error; err != nil {
-        return echo.ErrNotFound
-    }
-    var req struct {
-        OverrideKey *string `json:"override_key"`
-    }
-    if err := c.Bind(&req); err != nil {
-        return echo.ErrBadRequest
-    }
-    if req.OverrideKey != nil {
-        mount.PendingOverrideKey = *req.OverrideKey
-        h.DB.Save(&mount)
-    }
-    return c.JSON(http.StatusOK, mount)
-}
-
-func (h *Handler) DeleteEnvMount(c echo.Context) error {
-    var mount models.EnvVarMount
-    if err := h.DB.First(&mount, "id = ?", c.Param("id")).Error; err != nil {
-        return echo.ErrNotFound
-    }
-    h.DB.Model(&mount).Update("status", models.EnvVarMountStatusDeleting)
-    return c.NoContent(http.StatusNoContent)
-}
-```
-
-### 2. ルーティング登録
-
-```go
-api.GET("/deployments/:id/env-mounts",  h.ListEnvMounts)
-api.POST("/deployments/:id/env-mounts", h.CreateEnvMount)
-api.PUT("/env-mounts/:id",              h.UpdateEnvMount)
-api.DELETE("/env-mounts/:id",           h.DeleteEnvMount)
-```
+- `app/src/router/router.go`（編集）
+    - **何を**: GET/POST /api/v1/deployments/:id/env-var-mounts、DELETE /api/v1/env-var-mounts/:idエンドポイントの登録。
+    - **なぜ**: マウント設定エンドポイントをルーターに接続するため
 
 ## テスト確認項目
 
-- [ ] 同一 deployment に同じ env_var_id を2回 mount すると 409 になること
-- [ ] `PUT /env-mounts/:id` で `override_key` を送ると `pending_override_key` に入ること
-- [ ] `DELETE /env-mounts/:id` で `status = deleting` になること
+- [ ] POST /api/v1/deployments/:id/env-var-mountsでマウント設定が作成できること
+- [ ] GET /api/v1/deployments/:id/env-var-mountsでマウント設定一覧が取得できること
+- [ ] DELETE /api/v1/env-var-mounts/:idでマウント設定が削除できること
+- [ ] 同一DeploymentIDで同一EnvVarIDの重複マウントが拒否されること
 
 ### repository 層テスト
 
-- [ ] `EnvVarMountRepository.Create` でレコードが DB に保存されること
-- [ ] 同一 deployment + env_var_id の組み合わせで UNIQUE 制約エラーが返ること
-- [ ] `EnvVarMountRepository.Save` で `pending_override_key` が更新されること
-- [ ] `EnvVarMountRepository.UpdateStatus` で `status = deleting` に更新できること
+- [ ] EnvVarMountRepository.FindAllByDeploymentIDでマウント設定一覧が取得できること

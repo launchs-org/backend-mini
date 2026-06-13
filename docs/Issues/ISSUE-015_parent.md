@@ -1,13 +1,11 @@
-# ISSUE-015 [Phase4] Service / IngressRoute
+# ISSUE-015 [Phase4] Service・Ingress管理
 
 ## Sub Issues
-- [ ] ISSUE-016 GET / PUT /service エンドポイント
-- [ ] ISSUE-017 k8s Service manifest 生成・apply
-- [ ] ISSUE-018 POST /ingress エンドポイント・ホスト名自動生成
-- [ ] ISSUE-019 k8s IngressRoute (Traefik CRD) manifest 生成・apply
-- [ ] ISSUE-020 apply サービスに Service / IngressRoute を追加
+- [ ] ISSUE-016 Serviceエンドポイント
+- [ ] ISSUE-017 k8s Service操作
+- [ ] ISSUE-018 IngressRouteエンドポイント
+- [ ] ISSUE-019 Traefik IngressRoute操作
+- [ ] ISSUE-020 Apply拡張（Service・Ingress対応）
 
 ## 完了条件
-- apply 後に k8s Service が作成されること
-- POST /ingress でホスト名が自動生成されること
-- apply 後に k8s IngressRoute が作成されること
+applyでk8s ServiceとTraefik IngressRouteが作成・更新されること
