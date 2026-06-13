@@ -4,12 +4,15 @@ import "os"
 
 // Config はアプリケーション設定を取得するインターフェース
 type Config interface {
-	GetDBHost() string     // データベースホストを返す
-	GetDBUser() string     // データベースユーザー名を返す
-	GetDBPassword() string // データベースパスワードを返す
-	GetDBName() string     // データベース名を返す
-	GetDBPort() string     // データベースポートを返す
-	GetServerPort() string // サーバーのリッスンポートを返す
+	GetDBHost() string           // データベースホストを返す
+	GetDBUser() string           // データベースユーザー名を返す
+	GetDBPassword() string       // データベースパスワードを返す
+	GetDBName() string           // データベース名を返す
+	GetDBPort() string           // データベースポートを返す
+	GetServerPort() string       // サーバーのリッスンポートを返す
+	GetHarborEndpoint() string   // Harbor エンドポイントを返す
+	GetHarborRobotName() string  // Harbor 管理用 robot アカウント名を返す
+	GetHarborRobotSecret() string // Harbor 管理用 robot アカウントのシークレットを返す
 }
 
 // EnvConfig は環境変数から設定を読み込む Config の実装
@@ -42,6 +45,18 @@ func (envConfig *EnvConfig) GetDBPort() string {
 
 func (envConfig *EnvConfig) GetServerPort() string {
 	return getEnv("SERVER_PORT", "8080") // サーバーポートを環境変数から取得する
+}
+
+func (envConfig *EnvConfig) GetHarborEndpoint() string {
+	return getEnv("HARBOR_ENDPOINT", "") // Harbor エンドポイントを環境変数から取得する
+}
+
+func (envConfig *EnvConfig) GetHarborRobotName() string {
+	return getEnv("HARBOR_ROBOT_NAME", "") // Harbor 管理用 robot アカウント名を環境変数から取得する
+}
+
+func (envConfig *EnvConfig) GetHarborRobotSecret() string {
+	return getEnv("HARBOR_ROBOT_SECRET", "") // Harbor 管理用 robot アカウントのシークレットを環境変数から取得する
 }
 
 // getEnv は環境変数を取得し、未設定の場合はデフォルト値を返す

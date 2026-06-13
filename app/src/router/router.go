@@ -11,6 +11,7 @@ import (
 // RouterOptions はルーター生成に必要なハンドラーをまとめた構造体
 type RouterOptions struct {
 	UserQuotaHandler *handler.UserQuotaHandler // quota ハンドラー
+	ProjectHandler   *handler.ProjectHandler   // project ハンドラー
 }
 
 // New はミドルウェアとルーティングを設定した Echo インスタンスを返す
@@ -26,6 +27,13 @@ func New(opts RouterOptions) *echo.Echo {
 	// quota エンドポイントを登録する
 	apiGroup.GET("/users/quota", opts.UserQuotaHandler.GetQuota)    // quota 取得エンドポイント
 	apiGroup.PUT("/users/quota", opts.UserQuotaHandler.UpdateQuota) // quota 更新エンドポイント
+
+	// project エンドポイントを登録する
+	apiGroup.GET("/projects", opts.ProjectHandler.ListProjects)          // project 一覧取得エンドポイント
+	apiGroup.POST("/projects", opts.ProjectHandler.CreateProject)        // project 作成エンドポイント
+	apiGroup.GET("/projects/:id", opts.ProjectHandler.GetProject)        // project 詳細取得エンドポイント
+	apiGroup.PUT("/projects/:id", opts.ProjectHandler.UpdateProject)     // project 更新エンドポイント
+	apiGroup.DELETE("/projects/:id", opts.ProjectHandler.DeleteProject)  // project 削除エンドポイント
 
 	return router
 }

@@ -110,6 +110,17 @@ def create_env_file(file_path, content):
         file.write(content.strip())
     print(f"✅ ファイル '{file_path}' を生成しました。")
 
+def get_harbor_credentials():
+    """
+    Harbor の接続情報をユーザーに入力させます。
+    """
+    print("\n--- Harbor 設定 ---")
+    harbor_endpoint = input("Harbor のエンドポイントを入力してください (例: https://172.33.0.1): ")
+    harbor_robot_name = input("Harbor 管理用 robot アカウント名（base64エンコード済み）を入力してください: ")
+    harbor_robot_secret = input("Harbor 管理用 robot アカウントのシークレットを入力してください: ")
+    return harbor_endpoint, harbor_robot_name, harbor_robot_secret
+
+
 def main():
     """
     メイン処理：複数の設定ファイル生成関数を呼び出します。
@@ -126,6 +137,9 @@ def main():
     if not confirm_overwrite_all(files_to_check):
         return
 
+    # Harbor の接続情報を取得
+    harbor_endpoint, harbor_robot_name, harbor_robot_secret = get_harbor_credentials()
+
     # app.env のテンプレート
     app_env_template = f"""
 DB_HOST = db
@@ -133,6 +147,10 @@ DB_USER = main
 DB_PASSWORD = main
 DB_NAME = maindb
 DB_PORT = 5432
+
+HARBOR_ENDPOINT = {harbor_endpoint}
+HARBOR_ROBOT_NAME = {harbor_robot_name}
+HARBOR_ROBOT_SECRET = {harbor_robot_secret}
 """
 
     # app.env ファイルを生成
