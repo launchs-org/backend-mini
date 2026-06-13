@@ -27,6 +27,7 @@ ISSUE-009
 ## テスト確認項目
 
 - [ ] GET /api/v1/deployments/:id/apply-historiesでApply履歴一覧が取得できること
+- [ ] 他ユーザーのDeploymentのGET /apply-historiesすると403が返ること
 - [ ] 履歴が新しい順で返ること
 - [ ] Apply履歴が存在しない場合は空配列が返ること
 

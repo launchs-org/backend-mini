@@ -15,8 +15,8 @@ GitHub Webhookの登録・取得・削除エンドポイントを実装する。
     - **何を**: WebhookRepositoryインターフェースと実装。Create・FindByDeploymentID・Deleteメソッドを持つ。
     - **なぜ**: Webhook設定のDB操作を抽象化するため
 - `app/src/service/webhook_service.go`（新規作成）
-    - **何を**: WebhookServiceインターフェースと実装。CreateWebhook（シークレット自動生成）・GetWebhook・DeleteWebhookのCRUD。
-    - **なぜ**: Webhook管理のビジネスロジックをハンドラーから分離するため
+    - **何を**: WebhookServiceインターフェースと実装。CreateWebhook（シークレット自動生成）・GetWebhook・DeleteWebhookのCRUD。すべての操作でDeploymentのProjectIDからProjectを取得してUserIDを比較し、不一致の場合はErrForbiddenを返す（ハンドラーで403に変換）。
+    - **なぜ**: Webhook管理のビジネスロジックをハンドラーから分離するため。また、他ユーザーのデプロイメントへの不正アクセスを防ぐため
 - `app/src/handler/webhook_handler.go`（新規作成）
     - **何を**: CreateWebhook・GetWebhook・DeleteWebhookハンドラーの実装。
     - **なぜ**: Webhook管理のHTTPエントリーポイントが必要なため
@@ -30,6 +30,9 @@ GitHub Webhookの登録・取得・削除エンドポイントを実装する。
 - [ ] 作成時にシークレットが自動生成されること
 - [ ] GET /api/v1/deployments/:id/webhooksでWebhook設定が取得できること
 - [ ] DELETE /api/v1/webhooks/:idでWebhookが削除されること
+- [ ] 他ユーザーのDeploymentにPOST /webhooksすると403が返ること
+- [ ] 他ユーザーのDeploymentのGET /webhooksすると403が返ること
+- [ ] 他ユーザーのWebhookをDELETEすると403が返ること
 ### repository 層テスト
 
 - [ ] WebhookRepository.FindByDeploymentIDでWebhook設定が取得できること

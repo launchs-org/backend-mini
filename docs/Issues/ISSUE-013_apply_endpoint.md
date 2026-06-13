@@ -21,4 +21,5 @@ POST /api/v1/deployments/:id/apply エンドポイントを実装する。ApplyS
 - [ ] POST /api/v1/deployments/:id/applyでApplyHistoryが返ること
 - [ ] apply中のDeploymentに再applyすると409が返ること
 - [ ] 存在しないdeploymentIDで404が返ること
+- [ ] 他ユーザーのDeploymentにPOST /applyすると403が返ること
 - [ ] k8s apply失敗時に500が返ること

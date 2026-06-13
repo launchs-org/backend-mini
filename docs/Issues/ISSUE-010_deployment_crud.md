@@ -39,7 +39,9 @@ ISSUE-009
 - [ ] GET /api/v1/deployments/:idでデプロイメントが取得できること
 - [ ] PUT /api/v1/deployments/:idでpending_*フィールドが更新されること
 - [ ] DELETE /api/v1/deployments/:idでstatusがdeletingになること
-- [ ] 他プロジェクトのデプロイメントにアクセスすると404が返ること
+- [ ] 他ユーザーのDeploymentをGETすると403が返ること
+- [ ] 他ユーザーのDeploymentをPUTすると403が返ること
+- [ ] 他ユーザーのDeploymentをDELETEすると403が返ること
 
 ### repository 層テスト
 

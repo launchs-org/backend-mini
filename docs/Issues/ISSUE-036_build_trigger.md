@@ -15,8 +15,8 @@ ISSUE-035
     - **何を**: DeploymentBuildRepositoryインターフェースと実装。Create・FindByID・FindAllByDeploymentID・UpdateStatusメソッドを持つ。
     - **なぜ**: ビルドレコードのDB操作を抽象化するため
 - `app/src/service/build_service.go`（新規作成）
-    - **何を**: BuildServiceインターフェースと実装。TriggerBuildメソッドの実装。DeploymentBuildレコードをpendingで作成後にk8s Jobを起動する。ビルドタイプに応じてdockerfile/railpackのJobを生成する。
-    - **なぜ**: ビルドトリガーのビジネスロジックをハンドラーから分離するため
+    - **何を**: BuildServiceインターフェースと実装。TriggerBuildメソッドの実装。DeploymentBuildレコードをpendingで作成後にk8s Jobを起動する。ビルドタイプに応じてdockerfile/railpackのJobを生成する。TriggerBuildではDeploymentのProjectIDからProjectを取得してUserIDを比較し、不一致の場合はErrForbiddenを返す（ハンドラーで403に変換）。
+    - **なぜ**: ビルドトリガーのビジネスロジックをハンドラーから分離するため。また、他ユーザーのデプロイメントへの不正アクセスを防ぐため
 - `app/src/handler/build_handler.go`（新規作成）
     - **何を**: TriggerBuildハンドラーの実装。
     - **なぜ**: ビルドトリガーのHTTPエントリーポイントが必要なため
@@ -30,6 +30,7 @@ ISSUE-035
 - [ ] DeploymentBuildレコードがpendingで作成されること
 - [ ] k8s Jobが作成されること
 - [ ] ビルド中のDeploymentに再ビルドをトリガーすると409が返ること
+- [ ] 他ユーザーのDeploymentにPOST /buildすると403が返ること
 ### repository 層テスト
 
 - [ ] DeploymentBuildRepository.Createでビルドレコードが作成できること

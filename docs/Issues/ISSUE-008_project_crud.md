@@ -17,8 +17,8 @@ ISSUE-005
     - **なぜ**: プロジェクトのDB操作を抽象化し、トランザクション管理をServiceに委譲するため
 
 - `app/src/service/project_service.go`（編集）
-    - **何を**: ProjectServiceインターフェースと実装。CreateProjectでHarbor連携・Namespace作成を含むトランザクション処理。DeleteProjectでHarborとk8sリソースの削除。ListProjects・GetProject・UpdateProjectのCRUD。
-    - **なぜ**: プロジェクト作成の複合オペレーション（Harbor + k8s + DB）をサービス層で調整するため
+    - **何を**: ProjectServiceインターフェースと実装。CreateProjectでHarbor連携・Namespace作成を含むトランザクション処理。DeleteProjectでHarborとk8sリソースの削除。ListProjects・GetProject・UpdateProjectのCRUD。GetProject・UpdateProject・DeleteProjectではProjectのUserIDとリクエストユーザーIDを比較し、不一致の場合はErrForbiddenを返す（ハンドラーで403に変換）。
+    - **なぜ**: プロジェクト作成の複合オペレーション（Harbor + k8s + DB）をサービス層で調整するため。また、他ユーザーのプロジェクトへの不正アクセスを防ぐため
 
 - `app/src/handler/project_handler.go`（編集）
     - **何を**: ListProjects・CreateProject・GetProject・UpdateProject・DeleteProjectハンドラーの実装。
@@ -41,7 +41,9 @@ ISSUE-005
 - [ ] GET /api/v1/projects/:idでプロジェクトが取得できること
 - [ ] PUT /api/v1/projects/:idでプロジェクト名が更新できること
 - [ ] DELETE /api/v1/projects/:idでHarborとk8sリソースが削除されること
-- [ ] 他ユーザーのプロジェクトにアクセスすると404が返ること
+- [ ] 他ユーザーのプロジェクトにGETすると403が返ること
+- [ ] 他ユーザーのプロジェクトをPUTすると403が返ること
+- [ ] 他ユーザーのプロジェクトをDELETEすると403が返ること
 
 ### repository 層テスト
 

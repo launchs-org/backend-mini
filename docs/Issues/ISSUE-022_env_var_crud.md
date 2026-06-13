@@ -17,8 +17,8 @@ ISSUE-021
     - **なぜ**: 環境変数のDB操作を抽象化するため
 
 - `app/src/service/env_var_service.go`（新規作成）
-    - **何を**: EnvVarServiceインターフェースと実装。ListEnvVars・CreateEnvVar・UpdateEnvVar・DeleteEnvVarのCRUD。
-    - **なぜ**: 環境変数管理のビジネスロジックをハンドラーから分離するため
+    - **何を**: EnvVarServiceインターフェースと実装。ListEnvVars・CreateEnvVar・UpdateEnvVar・DeleteEnvVarのCRUD。すべての操作でProjectのUserIDとリクエストユーザーIDを比較し、不一致の場合はErrForbiddenを返す（ハンドラーで403に変換）。
+    - **なぜ**: 環境変数管理のビジネスロジックをハンドラーから分離するため。また、他ユーザーのプロジェクトリソースへの不正アクセスを防ぐため
 
 - `app/src/handler/env_var_handler.go`（新規作成）
     - **何を**: ListEnvVars・CreateEnvVar・UpdateEnvVar・DeleteEnvVarハンドラーの実装。
@@ -35,6 +35,10 @@ ISSUE-021
 - [ ] PUT /api/v1/env-vars/:idで環境変数が更新できること
 - [ ] DELETE /api/v1/env-vars/:idで環境変数が削除できること
 - [ ] is_secret=trueの環境変数の値がレスポンスでマスクされること
+- [ ] 他ユーザーのProjectにPOST /env-varsすると403が返ること
+- [ ] 他ユーザーのProjectのGET /env-varsすると403が返ること
+- [ ] 他ユーザーのProjectの環境変数をPUTすると403が返ること
+- [ ] 他ユーザーのProjectの環境変数をDELETEすると403が返ること
 
 ### repository 層テスト
 

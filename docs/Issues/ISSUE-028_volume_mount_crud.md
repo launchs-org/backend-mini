@@ -17,8 +17,8 @@ ISSUE-026
     - **なぜ**: ボリュームマウント設定のDB操作を抽象化するため
 
 - `app/src/service/volume_service.go`（編集）
-    - **何を**: ListVolumeMounts・CreateVolumeMount・DeleteVolumeMountメソッドの追加。同一DeploymentIDで同一mount_pathの重複を拒否する。
-    - **なぜ**: ボリュームマウント管理のビジネスロジックをハンドラーから分離するため
+    - **何を**: ListVolumeMounts・CreateVolumeMount・DeleteVolumeMountメソッドの追加。同一DeploymentIDで同一mount_pathの重複を拒否する。すべての操作でDeploymentのProjectIDからProjectを取得してUserIDを比較し、不一致の場合はErrForbiddenを返す（ハンドラーで403に変換）。
+    - **なぜ**: ボリュームマウント管理のビジネスロジックをハンドラーから分離するため。また、他ユーザーのデプロイメントへの不正アクセスを防ぐため
 
 - `app/src/handler/volume_handler.go`（編集）
     - **何を**: ListVolumeMounts・CreateVolumeMount・DeleteVolumeMountハンドラーの追加。
@@ -34,6 +34,9 @@ ISSUE-026
 - [ ] GET /api/v1/deployments/:id/volume-mountsでマウント設定一覧が取得できること
 - [ ] DELETE /api/v1/volume-mounts/:idでマウント設定が削除できること
 - [ ] 同一DeploymentIDで同一mount_pathの重複が拒否されること
+- [ ] 他ユーザーのDeploymentにPOST /volume-mountsすると403が返ること
+- [ ] 他ユーザーのDeploymentのGET /volume-mountsすると403が返ること
+- [ ] 他ユーザーのDeploymentのマウント設定をDELETEすると403が返ること
 
 ### repository 層テスト
 
