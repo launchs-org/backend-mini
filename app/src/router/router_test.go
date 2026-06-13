@@ -8,7 +8,7 @@ import (
 
 // TestNew_存在しないパスで404が返る は未登録パスへのリクエストで 404 が返ることを確認する
 func TestNew_存在しないパスで404が返る(t *testing.T) {
-	echoRouter := New() // ルーターを生成する
+	echoRouter := New(RouterOptions{}) // ルーターを生成する
 
 	// 存在しないパスへのリクエストを作成する
 	request := httptest.NewRequest(http.MethodGet, "/nonexistent-path", nil) // テスト用リクエストを生成する

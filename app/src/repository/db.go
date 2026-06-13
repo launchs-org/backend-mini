@@ -44,7 +44,7 @@ func Init() error {
 	logger.Println("データベースに接続しました")
 	logger.Println("マイグレーションを実行します")
 
-	// 自動マイグレーション
+	// 自動マイグレーションを実行する
 	err = AutoMigrate()
 
 	// エラー処理
@@ -63,6 +63,7 @@ func AutoMigrate() error {
 		&models.InstanceSize{},
 		&models.UserQuota{},
 		&models.Project{},
+		&models.HarborCredential{},
 		&models.Deployment{},
 		&models.DeploymentBuild{},
 		&models.ApplyHistory{},
