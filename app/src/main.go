@@ -69,10 +69,19 @@ func main() {
 	projectServiceImpl := service.NewProjectService(repository.Database, projectRepo, harborCredentialRepo, k8sClient, harborClient) // project サービスを生成する
 	projectHandler := handler.NewProjectHandler(projectServiceImpl)                                              // project ハンドラーを生成する
 
+	// deployment ハンドラーを DI 組み立てする
+	deploymentRepo := repository.NewDeploymentRepository(repository.Database)                     // deployment リポジトリを生成する
+	serviceRepo := repository.NewServiceRepository(repository.Database)                           // service リポジトリを生成する
+	deploymentServiceImpl := service.NewDeploymentService(deploymentRepo, serviceRepo, projectRepo) // deployment サービスを生成する
+	applyHistoryRepo := repository.NewApplyHistoryRepository(repository.Database)                 // apply_history リポジトリを生成する
+	applyServiceImpl := service.NewApplyService(repository.Database, k8sClient, deploymentRepo, applyHistoryRepo, projectRepo) // apply サービスを生成する
+	deploymentHandler := handler.NewDeploymentHandler(deploymentServiceImpl, applyServiceImpl)    // deployment ハンドラーを生成する
+
 	// ルーターを生成してサーバーを起動する
 	echoRouter := router.New(router.RouterOptions{
-		UserQuotaHandler: userQuotaHandler, // quota ハンドラーを注入する
-		ProjectHandler:   projectHandler,   // project ハンドラーを注入する
+		UserQuotaHandler:  userQuotaHandler,  // quota ハンドラーを注入する
+		ProjectHandler:    projectHandler,    // project ハンドラーを注入する
+		DeploymentHandler: deploymentHandler, // deployment ハンドラーを注入する
 	})
 	if err := echoRouter.Start(":" + cfg.GetServerPort()); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		slog.Error("サーバーの起動に失敗しました", "error", err) // サーバー起動失敗時にエラーログを出す

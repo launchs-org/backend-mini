@@ -10,7 +10,8 @@ import (
 // ProjectRepository は projects テーブルへのアクセスを定義するインターフェース
 type ProjectRepository interface {
 	Create(ctx context.Context, tx *gorm.DB, project *models.Project) error                                   // project を作成する
-	FindByID(ctx context.Context, tx *gorm.DB, projectID string) (*models.Project, error)                    // project を ID で取得する
+	FindByID(ctx context.Context, tx *gorm.DB, projectID string) (*models.Project, error)                    // project を ID で取得する（トランザクション内用）
+	FindByIDNoTx(ctx context.Context, projectID string) (*models.Project, error)                             // project を ID で取得する（トランザクション外用）
 	FindAllByUserID(ctx context.Context, userID string) ([]*models.Project, error)                            // userID に紐づく project 一覧を取得する
 	UpdateStatus(ctx context.Context, tx *gorm.DB, project *models.Project, status models.ProjectStatus) error // project のステータスを更新する
 	Save(ctx context.Context, project *models.Project) error                                                  // project を保存する
@@ -32,10 +33,20 @@ func (repo *projectRepositoryImpl) Create(ctx context.Context, tx *gorm.DB, proj
 	return tx.WithContext(ctx).Create(project).Error // tx を使って作成する
 }
 
-// FindByID は projectID に対応する project を返す
+// FindByID は projectID に対応する project を返す（トランザクション内用）
 func (repo *projectRepositoryImpl) FindByID(ctx context.Context, tx *gorm.DB, projectID string) (*models.Project, error) {
 	var projectData models.Project
 	err := tx.WithContext(ctx).First(&projectData, "id = ?", projectID).Error // tx を使って取得する
+	if err != nil {
+		return nil, err // 取得エラーを返す
+	}
+	return &projectData, nil
+}
+
+// FindByIDNoTx は projectID に対応する project を返す（トランザクション外用）
+func (repo *projectRepositoryImpl) FindByIDNoTx(ctx context.Context, projectID string) (*models.Project, error) {
+	var projectData models.Project
+	err := repo.db.WithContext(ctx).First(&projectData, "id = ?", projectID).Error // db を使って取得する
 	if err != nil {
 		return nil, err // 取得エラーを返す
 	}

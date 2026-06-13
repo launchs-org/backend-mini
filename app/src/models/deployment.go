@@ -64,8 +64,8 @@ type Deployment struct {
 	PendingDockerfilePath string `gorm:"type:varchar(255)"`
 
 	// --- ビルド管理 ---
-	// 空文字 = ビルド中。完了時に build_id をセット
-	CurrentBuildID string           `gorm:"type:uuid"`
+	// nil = ビルドなし。完了時に build_id をセット
+	CurrentBuildID *string          `gorm:"type:uuid"`
 	CurrentBuild   *DeploymentBuild `gorm:"foreignKey:CurrentBuildID"`
 
 	// --- デプロイ設定 ---
