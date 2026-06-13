@@ -1,0 +1,90 @@
+package k8s
+
+import (
+	"context"
+	"testing"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
+)
+
+// TestToNamespaceName_変換が正しく行われる は ToNamespaceName の変換結果を確認する
+func TestToNamespaceName_変換が正しく行われる(t *testing.T) {
+	testCases := []struct {
+		input    string // 入力値
+		expected string // 期待する変換結果
+	}{
+		{input: "MyProject", expected: "myproject"},                        // 大文字を小文字に変換する
+		{input: "my_project", expected: "my-project"},                      // アンダーバーをハイフンに変換する
+		{input: "my project", expected: "my-project"},                      // スペースをハイフンに変換する
+		{input: "My_Project_123", expected: "my-project-123"},              // 複合ケース
+		{input: "-leading-trailing-", expected: "leading-trailing"},        // 先頭・末尾のハイフンを除去する
+		{input: "already-valid", expected: "already-valid"},                // 変換不要なケース
+	}
+
+	for _, testCase := range testCases {
+		actualResult := ToNamespaceName(testCase.input) // 変換関数を実行する
+		if actualResult != testCase.expected {
+			t.Errorf("入力: %q, 期待: %q, 実際: %q", testCase.input, testCase.expected, actualResult)
+		}
+	}
+}
+
+// TestCreateNamespace_正常にnamespaceが作成される は CreateNamespace で k8s に namespace が作られることを確認する
+func TestCreateNamespace_正常にnamespaceが作成される(t *testing.T) {
+	fakeClient := fake.NewSimpleClientset() // fake k8s クライアントを生成する
+	ctx := context.Background()            // テスト用コンテキストを生成する
+
+	err := CreateNamespace(ctx, fakeClient, "test-namespace") // namespace を作成する
+	if err != nil {
+		t.Fatalf("CreateNamespace() がエラーを返しました: %v", err) // エラーが返った場合はテスト失敗とする
+	}
+
+	namespaceObj, err := fakeClient.CoreV1().Namespaces().Get(ctx, "test-namespace", metav1.GetOptions{}) // 作成した namespace を取得する
+	if err != nil {
+		t.Fatalf("namespace の取得に失敗しました: %v", err) // 取得失敗時はテスト失敗とする
+	}
+	if namespaceObj.Name != "test-namespace" { // namespace 名を確認する
+		t.Errorf("期待する namespace 名: test-namespace, 実際の名前: %s", namespaceObj.Name)
+	}
+	if namespaceObj.Labels["launchs.org/managed"] != "true" { // ラベルが付与されていることを確認する
+		t.Errorf("launchs.org/managed ラベルが設定されていません")
+	}
+}
+
+// TestDeleteNamespace_正常にnamespaceが削除される は DeleteNamespace で k8s から namespace が削除されることを確認する
+func TestDeleteNamespace_正常にnamespaceが削除される(t *testing.T) {
+	fakeClient := fake.NewSimpleClientset() // fake k8s クライアントを生成する
+	ctx := context.Background()            // テスト用コンテキストを生成する
+
+	err := CreateNamespace(ctx, fakeClient, "test-namespace") // 削除対象の namespace を作成する
+	if err != nil {
+		t.Fatalf("事前の CreateNamespace() がエラーを返しました: %v", err) // 前提条件の作成失敗時はテスト失敗とする
+	}
+
+	err = DeleteNamespace(ctx, fakeClient, "test-namespace") // namespace を削除する
+	if err != nil {
+		t.Fatalf("DeleteNamespace() がエラーを返しました: %v", err) // エラーが返った場合はテスト失敗とする
+	}
+
+	_, err = fakeClient.CoreV1().Namespaces().Get(ctx, "test-namespace", metav1.GetOptions{}) // 削除後に取得を試みる
+	if err == nil {
+		t.Fatal("削除後も namespace が存在しています") // 削除後に取得できた場合はテスト失敗とする
+	}
+}
+
+// TestCreateNamespace_同名namespaceを2回作成するとエラーになる は重複作成時にエラーが返ることを確認する
+func TestCreateNamespace_同名namespaceを2回作成するとエラーになる(t *testing.T) {
+	fakeClient := fake.NewSimpleClientset() // fake k8s クライアントを生成する
+	ctx := context.Background()            // テスト用コンテキストを生成する
+
+	err := CreateNamespace(ctx, fakeClient, "duplicate-namespace") // 1回目の作成
+	if err != nil {
+		t.Fatalf("1回目の CreateNamespace() がエラーを返しました: %v", err) // 1回目は成功するべきなのでテスト失敗とする
+	}
+
+	err = CreateNamespace(ctx, fakeClient, "duplicate-namespace") // 2回目の同名作成
+	if err == nil {
+		t.Fatal("同名 namespace の2回目作成はエラーを返すべきです") // エラーが返らない場合はテスト失敗とする
+	}
+}
