@@ -137,6 +137,30 @@ func (deploymentHandler *DeploymentHandler) DeleteDeployment(echoCtx echo.Contex
 	return echoCtx.JSON(http.StatusOK, deploymentData) // 更新後の deployment を返す
 }
 
+// ListApplyHistories は GET /deployments/:id/apply-histories のハンドラー
+func (deploymentHandler *DeploymentHandler) ListApplyHistories(echoCtx echo.Context) error {
+	userID := echoCtx.Get("UserID").(string) // ミドルウェアがセットした UserID を取得する
+	deploymentID := echoCtx.Param("id")      // パスパラメータから deployment ID を取得する
+
+	historyList, err := deploymentHandler.applyService.ListApplyHistories(echoCtx.Request().Context(), userID, deploymentID) // apply 履歴一覧を取得する
+	if err != nil {                                                                                                           // エラーが発生した場合
+		if errors.Is(err, service.ErrForbidden) { // 所有者でない場合は 403 を返す
+			return echoCtx.JSON(http.StatusForbidden, map[string]string{
+				"error": "アクセスが禁止されています",
+			})
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) { // deployment が存在しない場合は 404 を返す
+			return echoCtx.JSON(http.StatusNotFound, map[string]string{
+				"error": "リソースが見つかりません",
+			})
+		}
+		return echoCtx.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "内部サーバーエラー",
+		})
+	}
+	return echoCtx.JSON(http.StatusOK, historyList) // 履歴一覧を返す
+}
+
 // ApplyDeployment は POST /deployments/:id/apply のハンドラー
 func (deploymentHandler *DeploymentHandler) ApplyDeployment(echoCtx echo.Context) error {
 	userID := echoCtx.Get("UserID").(string) // ミドルウェアがセットした UserID を取得する
