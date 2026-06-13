@@ -304,11 +304,16 @@ func TestGetDeployment_正常にdeployment詳細が返る(t *testing.T) {
 
 // mockApplyService は ApplyServiceInterface のテスト用モック実装
 type mockApplyService struct {
-	applyFunc func(ctx context.Context, userID string, deploymentID string) (*service.ApplyResult, error)
+	applyFunc               func(ctx context.Context, userID string, deploymentID string) (*service.ApplyResult, error)
+	listApplyHistoriesFunc  func(ctx context.Context, userID string, deploymentID string) ([]*models.ApplyHistory, error)
 }
 
 func (mock *mockApplyService) Apply(ctx context.Context, userID string, deploymentID string) (*service.ApplyResult, error) {
 	return mock.applyFunc(ctx, userID, deploymentID) // モック関数を呼び出す
+}
+
+func (mock *mockApplyService) ListApplyHistories(ctx context.Context, userID string, deploymentID string) ([]*models.ApplyHistory, error) {
+	return mock.listApplyHistoriesFunc(ctx, userID, deploymentID) // モック関数を呼び出す
 }
 
 // TestApplyDeployment_正常にApplyHistoryが返る は apply 成功時に 200 と ApplyResult が返ることを確認する
@@ -481,5 +486,98 @@ func TestApplyDeployment_他ユーザーのdeploymentは403になる(t *testing.
 	}
 	if responseRecorder.Code != http.StatusForbidden { // 403 が返ることを確認する
 		t.Errorf("期待するステータスコード: %d, 実際のステータスコード: %d", http.StatusForbidden, responseRecorder.Code)
+	}
+}
+
+// TestListApplyHistories_正常に履歴一覧が返る は履歴が存在するとき 200 と一覧が返ることを確認する
+func TestListApplyHistories_正常に履歴一覧が返る(t *testing.T) {
+	expectedHistoryList := []*models.ApplyHistory{
+		{ID: "history-id-1", DeploymentID: "dep-1", Status: models.ApplyStatusApplied}, // 1件目の履歴
+		{ID: "history-id-2", DeploymentID: "dep-1", Status: models.ApplyStatusFailed},  // 2件目の履歴
+	}
+
+	mockApplySvc := &mockApplyService{
+		listApplyHistoriesFunc: func(ctx context.Context, userID string, deploymentID string) ([]*models.ApplyHistory, error) {
+			return expectedHistoryList, nil // 正常系の結果を返す
+		},
+	}
+
+	deploymentHandler := NewDeploymentHandler(nil, mockApplySvc)                                                                                                   // ハンドラーを生成する
+	echoCtx, responseRecorder := setupDeploymentEchoContext(http.MethodGet, "/api/v1/deployments/dep-1/apply-histories", "", map[string]string{"id": "dep-1"}) // テスト用コンテキストを生成する
+
+	err := deploymentHandler.ListApplyHistories(echoCtx) // ハンドラーを実行する
+	if err != nil {
+		t.Fatalf("ハンドラーがエラーを返しました: %v", err)
+	}
+	if responseRecorder.Code != http.StatusOK { // 200 が返ることを確認する
+		t.Errorf("期待するステータスコード: %d, 実際のステータスコード: %d", http.StatusOK, responseRecorder.Code)
+	}
+
+	var responseBody []*models.ApplyHistory
+	if err := json.NewDecoder(responseRecorder.Body).Decode(&responseBody); err != nil { // レスポンスをデコードする
+		t.Fatalf("レスポンスのデコードに失敗しました: %v", err)
+	}
+	if len(responseBody) != 2 { // 2件返ることを確認する
+		t.Errorf("期待する件数: 2, 実際の件数: %d", len(responseBody))
+	}
+}
+
+// TestListApplyHistories_履歴が存在しない場合は空配列が返る は履歴が0件のとき空配列が返ることを確認する
+func TestListApplyHistories_履歴が存在しない場合は空配列が返る(t *testing.T) {
+	mockApplySvc := &mockApplyService{
+		listApplyHistoriesFunc: func(ctx context.Context, userID string, deploymentID string) ([]*models.ApplyHistory, error) {
+			return []*models.ApplyHistory{}, nil // 空スライスを返す
+		},
+	}
+
+	deploymentHandler := NewDeploymentHandler(nil, mockApplySvc)                                                                                                   // ハンドラーを生成する
+	echoCtx, responseRecorder := setupDeploymentEchoContext(http.MethodGet, "/api/v1/deployments/dep-1/apply-histories", "", map[string]string{"id": "dep-1"}) // テスト用コンテキストを生成する
+
+	err := deploymentHandler.ListApplyHistories(echoCtx) // ハンドラーを実行する
+	if err != nil {
+		t.Fatalf("ハンドラーがエラーを返しました: %v", err)
+	}
+	if responseRecorder.Code != http.StatusOK { // 200 が返ることを確認する
+		t.Errorf("期待するステータスコード: %d, 実際のステータスコード: %d", http.StatusOK, responseRecorder.Code)
+	}
+}
+
+// TestListApplyHistories_他ユーザーのdeploymentは403になる は所有者でない場合 403 が返ることを確認する
+func TestListApplyHistories_他ユーザーのdeploymentは403になる(t *testing.T) {
+	mockApplySvc := &mockApplyService{
+		listApplyHistoriesFunc: func(ctx context.Context, userID string, deploymentID string) ([]*models.ApplyHistory, error) {
+			return nil, service.ErrForbidden // 所有権エラーを返す
+		},
+	}
+
+	deploymentHandler := NewDeploymentHandler(nil, mockApplySvc)                                                                                                   // ハンドラーを生成する
+	echoCtx, responseRecorder := setupDeploymentEchoContext(http.MethodGet, "/api/v1/deployments/dep-1/apply-histories", "", map[string]string{"id": "dep-1"}) // テスト用コンテキストを生成する
+
+	err := deploymentHandler.ListApplyHistories(echoCtx) // ハンドラーを実行する
+	if err != nil {
+		t.Fatalf("ハンドラーがエラーを返しました: %v", err)
+	}
+	if responseRecorder.Code != http.StatusForbidden { // 403 が返ることを確認する
+		t.Errorf("期待するステータスコード: %d, 実際のステータスコード: %d", http.StatusForbidden, responseRecorder.Code)
+	}
+}
+
+// TestListApplyHistories_存在しないdeploymentは404になる は deployment が存在しない場合 404 が返ることを確認する
+func TestListApplyHistories_存在しないdeploymentは404になる(t *testing.T) {
+	mockApplySvc := &mockApplyService{
+		listApplyHistoriesFunc: func(ctx context.Context, userID string, deploymentID string) ([]*models.ApplyHistory, error) {
+			return nil, gorm.ErrRecordNotFound // レコード不存在エラーを返す
+		},
+	}
+
+	deploymentHandler := NewDeploymentHandler(nil, mockApplySvc)                                                                                                   // ハンドラーを生成する
+	echoCtx, responseRecorder := setupDeploymentEchoContext(http.MethodGet, "/api/v1/deployments/dep-1/apply-histories", "", map[string]string{"id": "dep-1"}) // テスト用コンテキストを生成する
+
+	err := deploymentHandler.ListApplyHistories(echoCtx) // ハンドラーを実行する
+	if err != nil {
+		t.Fatalf("ハンドラーがエラーを返しました: %v", err)
+	}
+	if responseRecorder.Code != http.StatusNotFound { // 404 が返ることを確認する
+		t.Errorf("期待するステータスコード: %d, 実際のステータスコード: %d", http.StatusNotFound, responseRecorder.Code)
 	}
 }

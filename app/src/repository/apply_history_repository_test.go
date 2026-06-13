@@ -99,6 +99,85 @@ func TestApplyHistoryRepository_UpdateStatus_failedに更新できる(t *testing
 	}
 }
 
+// TestApplyHistoryRepository_FindAllByDeploymentID_新しい順で取得できる は履歴が applied_at 降順で返ることを確認する
+func TestApplyHistoryRepository_FindAllByDeploymentID_新しい順で取得できる(t *testing.T) {
+	db := setupTestDB(t)                     // テスト用 DB を準備する
+	projectData := createTestProject(t, db) // テスト用 Project を作成する
+
+	// テスト用 Deployment を作成する
+	deploymentData := &models.Deployment{
+		ProjectID: projectData.ID,
+		Name:      "test-app-hist-list",
+		Type:      models.DeploymentTypeImageURL,
+		Status:    models.DeploymentStatusPending,
+		AppStatus: models.AppStatusPending,
+	}
+	db.Create(deploymentData)                                      // テスト用レコードを作成する
+	t.Cleanup(func() { db.Unscoped().Delete(deploymentData) }) // テスト終了後にレコードを削除する
+
+	// 古い履歴を先に作成する
+	oldHistory := &models.ApplyHistory{
+		DeploymentID: deploymentData.ID,
+		Manifests:    datatypes.JSON(`{}`),
+		Status:       models.ApplyStatusApplied,
+		AppliedAt:    time.Now().Add(-1 * time.Hour), // 1時間前を設定する
+	}
+	db.Create(oldHistory)                                      // 古い履歴を作成する
+	t.Cleanup(func() { db.Unscoped().Delete(oldHistory) }) // テスト終了後にレコードを削除する
+
+	// 新しい履歴を後から作成する
+	newHistory := &models.ApplyHistory{
+		DeploymentID: deploymentData.ID,
+		Manifests:    datatypes.JSON(`{}`),
+		Status:       models.ApplyStatusFailed,
+		AppliedAt:    time.Now(), // 現在時刻を設定する
+	}
+	db.Create(newHistory)                                      // 新しい履歴を作成する
+	t.Cleanup(func() { db.Unscoped().Delete(newHistory) }) // テスト終了後にレコードを削除する
+
+	repo := NewApplyHistoryRepository(db) // リポジトリを生成する
+
+	historyList, err := repo.FindAllByDeploymentID(context.Background(), deploymentData.ID) // 履歴一覧を取得する
+	if err != nil {
+		t.Fatalf("FindAllByDeploymentID がエラーを返しました: %v", err)
+	}
+	if len(historyList) != 2 { // 2件返ることを確認する
+		t.Fatalf("期待する件数: 2, 実際の件数: %d", len(historyList))
+	}
+	if historyList[0].ID != newHistory.ID { // 最初の要素が新しい履歴であることを確認する
+		t.Errorf("最初の要素が新しい履歴でありません: %s", historyList[0].ID)
+	}
+	if historyList[1].ID != oldHistory.ID { // 2番目の要素が古い履歴であることを確認する
+		t.Errorf("2番目の要素が古い履歴でありません: %s", historyList[1].ID)
+	}
+}
+
+// TestApplyHistoryRepository_FindAllByDeploymentID_履歴が存在しない場合は空スライスが返る は履歴が0件のとき空スライスが返ることを確認する
+func TestApplyHistoryRepository_FindAllByDeploymentID_履歴が存在しない場合は空スライスが返る(t *testing.T) {
+	db := setupTestDB(t)                     // テスト用 DB を準備する
+	projectData := createTestProject(t, db) // テスト用 Project を作成する
+
+	deploymentData := &models.Deployment{
+		ProjectID: projectData.ID,
+		Name:      "test-app-hist-empty",
+		Type:      models.DeploymentTypeImageURL,
+		Status:    models.DeploymentStatusPending,
+		AppStatus: models.AppStatusPending,
+	}
+	db.Create(deploymentData)                                      // テスト用レコードを作成する
+	t.Cleanup(func() { db.Unscoped().Delete(deploymentData) }) // テスト終了後にレコードを削除する
+
+	repo := NewApplyHistoryRepository(db) // リポジトリを生成する
+
+	historyList, err := repo.FindAllByDeploymentID(context.Background(), deploymentData.ID) // 履歴一覧を取得する
+	if err != nil {
+		t.Fatalf("FindAllByDeploymentID がエラーを返しました: %v", err)
+	}
+	if len(historyList) != 0 { // 空スライスが返ることを確認する
+		t.Errorf("期待する件数: 0, 実際の件数: %d", len(historyList))
+	}
+}
+
 // TestDeploymentRepository_FindByIDForUpdate_正常にロック付きで取得される は FindByIDForUpdate で Deployment が取得されることを確認する
 func TestDeploymentRepository_FindByIDForUpdate_正常にロック付きで取得される(t *testing.T) {
 	db := setupTestDB(t)                     // テスト用 DB を準備する
