@@ -4,17 +4,18 @@ import (
 	"app/models"
 	"app/repository"
 	"context"
+	"errors"
 
 	"gorm.io/gorm"
 )
 
 // DeploymentService は Deployment CRUD のビジネスロジックを定義するインターフェース
 type DeploymentService interface {
-	ListDeployments(ctx context.Context, projectID string) ([]models.Deployment, error)                                         // deployment 一覧を取得する
-	CreateDeployment(ctx context.Context, req CreateDeploymentRequest) (*models.Deployment, error)                              // deployment を作成する
-	GetDeployment(ctx context.Context, deploymentID string) (*models.Deployment, error)                                         // deployment を取得する
-	UpdateDeployment(ctx context.Context, deploymentID string, req UpdateDeploymentRequest) (*models.Deployment, error)         // deployment を更新する
-	DeleteDeployment(ctx context.Context, deploymentID string) (*models.Deployment, error)                                      // deployment を削除（deleting 状態に変更）する
+	ListDeployments(ctx context.Context, projectID string) ([]models.Deployment, error)                                                  // deployment 一覧を取得する
+	CreateDeployment(ctx context.Context, req CreateDeploymentRequest) (*models.Deployment, error)                                       // deployment を作成する
+	GetDeployment(ctx context.Context, userID string, deploymentID string) (*models.Deployment, error)                                   // deployment を取得する
+	UpdateDeployment(ctx context.Context, userID string, deploymentID string, req UpdateDeploymentRequest) (*models.Deployment, error)   // deployment を更新する
+	DeleteDeployment(ctx context.Context, userID string, deploymentID string) (*models.Deployment, error)                                // deployment を削除（deleting 状態に変更）する
 }
 
 // CreateDeploymentRequest は POST /projects/:id/deployments のリクエスト構造体
@@ -50,13 +51,15 @@ type UpdateDeploymentRequest struct {
 type deploymentServiceImpl struct {
 	deploymentRepo repository.DeploymentRepository // deployment リポジトリ
 	serviceRepo    repository.ServiceRepository    // service リポジトリ
+	projectRepo    repository.ProjectRepository    // project リポジトリ（所有権チェック用）
 }
 
 // NewDeploymentService は DeploymentService の実装を返す
-func NewDeploymentService(deploymentRepo repository.DeploymentRepository, serviceRepo repository.ServiceRepository) DeploymentService {
+func NewDeploymentService(deploymentRepo repository.DeploymentRepository, serviceRepo repository.ServiceRepository, projectRepo repository.ProjectRepository) DeploymentService {
 	return &deploymentServiceImpl{
 		deploymentRepo: deploymentRepo, // deployment リポジトリを注入する
 		serviceRepo:    serviceRepo,    // service リポジトリを注入する
+		projectRepo:    projectRepo,    // project リポジトリを注入する
 	}
 }
 
@@ -116,15 +119,25 @@ func (svc *deploymentServiceImpl) CreateDeployment(ctx context.Context, req Crea
 }
 
 // GetDeployment は deploymentID に対応する deployment を返す
-func (svc *deploymentServiceImpl) GetDeployment(ctx context.Context, deploymentID string) (*models.Deployment, error) {
-	return svc.deploymentRepo.FindByID(ctx, deploymentID) // リポジトリ経由で取得する
-}
-
-// UpdateDeployment は送られてきたフィールドのみ pending_*** を更新する
-func (svc *deploymentServiceImpl) UpdateDeployment(ctx context.Context, deploymentID string, req UpdateDeploymentRequest) (*models.Deployment, error) {
+func (svc *deploymentServiceImpl) GetDeployment(ctx context.Context, userID string, deploymentID string) (*models.Deployment, error) {
 	deploymentData, err := svc.deploymentRepo.FindByID(ctx, deploymentID) // リポジトリ経由で取得する
 	if err != nil {
 		return nil, err // 取得エラーを返す
+	}
+	if err := svc.checkOwnership(ctx, userID, deploymentData.ProjectID); err != nil { // 所有権を確認する
+		return nil, err
+	}
+	return deploymentData, nil
+}
+
+// UpdateDeployment は送られてきたフィールドのみ pending_*** を更新する
+func (svc *deploymentServiceImpl) UpdateDeployment(ctx context.Context, userID string, deploymentID string, req UpdateDeploymentRequest) (*models.Deployment, error) {
+	deploymentData, err := svc.deploymentRepo.FindByID(ctx, deploymentID) // リポジトリ経由で取得する
+	if err != nil {
+		return nil, err // 取得エラーを返す
+	}
+	if err := svc.checkOwnership(ctx, userID, deploymentData.ProjectID); err != nil { // 所有権を確認する
+		return nil, err
 	}
 
 	// 送られてきたフィールドのみ pending_*** に書き込む
@@ -166,10 +179,13 @@ func (svc *deploymentServiceImpl) UpdateDeployment(ctx context.Context, deployme
 }
 
 // DeleteDeployment は deployment のステータスを deleting に変更する
-func (svc *deploymentServiceImpl) DeleteDeployment(ctx context.Context, deploymentID string) (*models.Deployment, error) {
+func (svc *deploymentServiceImpl) DeleteDeployment(ctx context.Context, userID string, deploymentID string) (*models.Deployment, error) {
 	deploymentData, err := svc.deploymentRepo.FindByID(ctx, deploymentID) // リポジトリ経由で取得する
 	if err != nil {
 		return nil, err // 取得エラーを返す
+	}
+	if err := svc.checkOwnership(ctx, userID, deploymentData.ProjectID); err != nil { // 所有権を確認する
+		return nil, err
 	}
 
 	deploymentData.Status = models.DeploymentStatusDeleting                       // ステータスを deleting に変更する
@@ -181,3 +197,18 @@ func (svc *deploymentServiceImpl) DeleteDeployment(ctx context.Context, deployme
 
 // ErrDeploymentNotFound は deployment が見つからない場合のエラー
 var ErrDeploymentNotFound = gorm.ErrRecordNotFound
+
+// ErrForbidden は操作対象リソースの所有者でない場合のエラー
+var ErrForbidden = errors.New("forbidden")
+
+// checkOwnership は project の UserID と userID が一致するか確認する
+func (svc *deploymentServiceImpl) checkOwnership(ctx context.Context, userID string, projectID string) error {
+	projectData, err := svc.projectRepo.FindByIDNoTx(ctx, projectID) // project を取得する
+	if err != nil {
+		return err // 取得エラーを返す
+	}
+	if projectData.UserID != userID { // UserID が一致しない場合は禁止エラーを返す
+		return ErrForbidden
+	}
+	return nil
+}
