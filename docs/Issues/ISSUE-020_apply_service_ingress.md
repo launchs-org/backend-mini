@@ -1,58 +1,20 @@
-# ISSUE-020 apply サービスに Service / IngressRoute を追加
+# ISSUE-020 Apply拡張（Service・Ingress対応）
 
 ## 親 Issue
 ISSUE-015
 
 ## 概要
-ISSUE-012 の apply サービスを拡張し、Service と IngressRoute も k8s に apply する。
+ApplyサービスにService・IngressRouteのk8s同期処理を追加する。apply時にDeploymentと合わせてServiceとIngressRouteも作成・更新する。
 
-## 実装手順
+## 変更ファイル一覧
 
-### `service/apply.go` に追加
-
-```go
-// Service の apply（apply.go の k8s apply セクションに追加）
-
-// Service の pending_ports を取得
-var svcModel models.Service
-tx.Where("deployment_id = ?", deploymentID).First(&svcModel)
-
-ports := svcModel.PendingPorts
-if ports == nil { ports = svcModel.Ports }
-
-if ports != nil {
-    if err := k8s.ApplyService(ctx, s.K8s, project.Namespace, d.Name, ports); err != nil {
-        // Service apply 失敗時の処理
-    }
-    // pending_ports → ports に昇格
-    tx.Model(&svcModel).Updates(map[string]interface{}{
-        "ports":         ports,
-        "pending_ports": nil,
-        "status":        models.ServiceStatusActive,
-    })
-}
-
-// IngressRoute の apply
-var ingressModel models.IngressRoute
-if err := tx.Where("service_id = ?", svcModel.ID).First(&ingressModel).Error; err == nil {
-    k8s.ApplyIngressRoute(
-        ctx, s.DynamicClient,
-        project.Namespace, d.Name,
-        ingressModel.Host, ingressModel.PathPrefix,
-        d.Name, ingressModel.Port,
-    )
-    tx.Model(&ingressModel).Update("status", models.IngressRouteStatusActive)
-}
-```
+- `app/src/service/apply.go`（編集）
+    - **何を**: Applyメソッドの拡張。k8s Deployment同期後にk8s Serviceの適用を追加。IngressRouteレコードが存在する場合はTraefik IngressRouteも適用。apply成功後にService・IngressRouteのpending_*フィールドも昇格。
+    - **なぜ**: ネットワーク公開のためにDeploymentと合わせてService/IngressRouteを同期する必要があるため
 
 ## テスト確認項目
 
-- [ ] apply 後に k8s Service が作成されること
-- [ ] apply 後に `services.pending_ports` が空になること
-- [ ] IngressRoute が存在する場合、apply 後に k8s IngressRoute が作成されること
-- [ ] Service も IngressRoute もない状態で apply がエラーにならないこと
-
-### repository 層テスト
-
-- [ ] `ServiceRepository.Save` で apply 後に `pending_ports` が空になること
-- [ ] `IngressRepository.FindByDeploymentID` で ingress が存在しない場合 `ErrRecordNotFound` が返ること
+- [ ] applyでk8s Serviceが作成・更新されること
+- [ ] IngressRoute設定がある場合にTraefik IngressRouteが作成・更新されること
+- [ ] apply後にService・IngressRouteのpending_*フィールドがクリアされること
+- [ ] k8s Service apply失敗時にApplyHistoryがfailedに更新されること

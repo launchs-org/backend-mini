@@ -1,44 +1,19 @@
-# ISSUE-030 apply サービスに Volume Mount 追加
+# ISSUE-030 Apply拡張（PVC対応）
 
 ## 親 Issue
 ISSUE-026
 
-## 実装手順
+## 概要
+ApplyサービスにPVCの同期処理とDeploymentへのvolumeMountsの追加を実装する。
 
-### `service/apply.go` に追加
+## 変更ファイル一覧
 
-```go
-// volume_mounts を取得して PVC apply と Deployment volumeMounts を設定
-var volMounts []models.VolumeMount
-tx.Preload("Volume").
-    Where("deployment_id = ? AND status != ?", deploymentID, "deleting").
-    Find(&volMounts)
-
-for _, vm := range volMounts {
-    // PVC を apply
-    k8s.ApplyPVC(ctx, s.K8s, project.Namespace, vm.Volume.Name, vm.Volume.SizeMB)
-
-    // pending_mount_path → mount_path に昇格
-    mountPath := vm.PendingMountPath
-    if mountPath == "" { mountPath = vm.MountPath }
-    tx.Model(&vm).Updates(map[string]interface{}{
-        "mount_path":         mountPath,
-        "pending_mount_path": "",
-        "status":             models.VolumeMountStatusMounted,
-    })
-}
-
-// manifest generator に volume_mounts を渡して
-// Deployment の spec.volumes と spec.containers[].volumeMounts を設定
-```
+- `app/src/service/apply.go`（編集）
+    - **何を**: Applyメソッドの拡張。VolumeMountsを取得して参照するVolumeを解決。各VolumeのPVCをk8sに適用。Deploymentのvolumes・volumeMountsにマウント設定を追加。apply成功後にVolumeMountのstatusをappliedに更新。
+    - **なぜ**: PersistentストレージをDeploymentから利用するためにPVCとvolumeMountsを同期する必要があるため
 
 ## テスト確認項目
 
-- [ ] apply 後に k8s PVC が作成されること
-- [ ] apply 後に `pending_mount_path` が空になること
-- [ ] apply 後に Deployment の volumeMounts に設定されること
-
-### repository 層テスト
-
-- [ ] `VolumeMountRepository.Save` で apply 後に `pending_mount_path` が空になること
-- [ ] `VolumeMountRepository.FindAllByDeploymentID` で全ボリュームマウントが取得できること
+- [ ] applyでPVCが作成・更新されること
+- [ ] DeploymentのvolumeMountsにマウント設定が反映されること
+- [ ] PVC作成失敗時にApplyHistoryがfailedに更新されること

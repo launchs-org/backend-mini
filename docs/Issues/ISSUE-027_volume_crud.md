@@ -1,107 +1,40 @@
-# ISSUE-027 Volume CRUD エンドポイント
+# ISSUE-027 ボリュームCRUD
 
 ## 親 Issue
 ISSUE-026
 
 ## 概要
-Volume の作成・取得・削除を実装する。作成時に quota チェックを行う。size_mb は作成後変更不可。
+PersistentVolumeClaimの設定を管理するボリュームのCRUDエンドポイントを実装する。ボリュームはプロジェクトスコープで管理する。
 
-## 実装手順
+## 変更ファイル一覧
 
-### 1. `service/quota.go` を作成（volume quota チェック）
+- `app/src/models/volume.go`（編集）
+    - **何を**: Volumeモデルの定義。ProjectIDへの外部キー、name・size_mb・storage_classフィールドを持つ。
+    - **なぜ**: ボリュームエンティティのDB表現を定義するため
 
-```go
-package service
+- `app/src/repository/volume_repository.go`（新規作成）
+    - **何を**: VolumeRepositoryインターフェースと実装。Create・FindByID・FindAllByProjectID・Deleteメソッドを持つ。
+    - **なぜ**: ボリュームのDB操作を抽象化するため
 
-func CheckVolumeQuota(db *gorm.DB, accountID string, newSizeMB int) error {
-    var quota models.AccountQuota
-    db.Where("account_id = ?", accountID).First(&quota)
+- `app/src/service/volume_service.go`（新規作成）
+    - **何を**: VolumeServiceインターフェースと実装。ListVolumes・CreateVolume・DeleteVolumeのCRUD。
+    - **なぜ**: ボリューム管理のビジネスロジックをハンドラーから分離するため
 
-    var currentMB int64
-    db.Model(&models.Volume{}).
-        Joins("JOIN projects ON projects.id = volumes.project_id").
-        Where("projects.account_id = ? AND volumes.status != ?", accountID, "deleted").
-        Select("COALESCE(SUM(size_mb), 0)").Scan(&currentMB)
+- `app/src/handler/volume_handler.go`（新規作成）
+    - **何を**: ListVolumes・CreateVolume・DeleteVolumeハンドラーの実装。
+    - **なぜ**: ボリュームCRUDのHTTPエントリーポイントが必要なため
 
-    if int(currentMB)+newSizeMB > quota.MaxVolumeMB {
-        return fmt.Errorf("volume quota exceeded: current=%dMB, adding=%dMB, max=%dMB",
-            currentMB, newSizeMB, quota.MaxVolumeMB)
-    }
-    return nil
-}
-```
-
-### 2. `handler/volume.go` を作成
-
-```go
-func (h *Handler) CreateVolume(c echo.Context) error {
-    projectID := c.Param("id")
-    var req struct {
-        Name   string `json:"name"`
-        SizeMB int    `json:"size_mb"`
-    }
-    if err := c.Bind(&req); err != nil { return echo.ErrBadRequest }
-    if req.SizeMB <= 0 {
-        return c.JSON(http.StatusBadRequest, map[string]string{
-            "error": "size_mb must be greater than 0", "code": "INVALID_SIZE",
-        })
-    }
-
-    // project から account_id を取得して quota チェック
-    var project models.Project
-    h.DB.First(&project, "id = ?", projectID)
-    if err := service.CheckVolumeQuota(h.DB, project.AccountID, req.SizeMB); err != nil {
-        return c.JSON(http.StatusBadRequest, map[string]string{
-            "error": err.Error(), "code": "QUOTA_EXCEEDED",
-        })
-    }
-
-    vol := models.Volume{
-        ProjectID: projectID,
-        Name:      req.Name,
-        SizeMB:    req.SizeMB,
-        Status:    models.VolumeStatusPending,
-    }
-    h.DB.Create(&vol)
-    return c.JSON(http.StatusCreated, vol)
-}
-
-func (h *Handler) DeleteVolume(c echo.Context) error {
-    var vol models.Volume
-    if err := h.DB.First(&vol, "id = ?", c.Param("id")).Error; err != nil {
-        return echo.ErrNotFound
-    }
-    // mount されている場合は削除不可
-    var count int64
-    h.DB.Model(&models.VolumeMount{}).Where("volume_id = ?", vol.ID).Count(&count)
-    if count > 0 {
-        return c.JSON(http.StatusConflict, map[string]string{
-            "error": "volume is mounted", "code": "VOLUME_MOUNTED",
-        })
-    }
-    h.DB.Model(&vol).Update("status", models.VolumeStatusDeleting)
-    return c.NoContent(http.StatusNoContent)
-}
-```
-
-### 3. ルーティング登録
-
-```go
-api.GET("/projects/:id/volumes",  h.ListVolumes)
-api.POST("/projects/:id/volumes", h.CreateVolume)
-api.DELETE("/volumes/:id",        h.DeleteVolume)
-```
+- `app/src/router/router.go`（編集）
+    - **何を**: GET/POST /api/v1/projects/:id/volumes、DELETE /api/v1/volumes/:idエンドポイントの登録。
+    - **なぜ**: ボリュームCRUDエンドポイントをルーターに接続するため
 
 ## テスト確認項目
 
-- [ ] quota を超える volume 作成で 400 になること
-- [ ] size_mb=0 で 400 になること
-- [ ] mount されている volume を DELETE すると 409 になること
-- [ ] volume 作成で `status = pending` になること
+- [ ] POST /api/v1/projects/:id/volumesでボリュームが作成できること
+- [ ] GET /api/v1/projects/:id/volumesでボリューム一覧が取得できること
+- [ ] DELETE /api/v1/volumes/:idでボリュームが削除できること
 
 ### repository 層テスト
 
-- [ ] `VolumeRepository.Create` でレコードが DB に保存されること
-- [ ] `VolumeRepository.FindByID` で存在しない ID を渡すと `ErrRecordNotFound` が返ること
-- [ ] `VolumeRepository.Delete` でマウント済みの場合は削除が阻止されること（外部キー制約または service 層チェック）
-- [ ] `VolumeRepository.FindByID` で `status = pending` のレコードが取得できること
+- [ ] VolumeRepository.Createでボリュームが作成できること
+- [ ] VolumeRepository.FindAllByProjectIDでプロジェクトのボリューム一覧が取得できること

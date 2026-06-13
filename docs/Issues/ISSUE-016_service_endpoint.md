@@ -1,93 +1,40 @@
-# ISSUE-016 GET / PUT /service エンドポイント
+# ISSUE-016 ServiceエンドポイントCRUD
 
 ## 親 Issue
 ISSUE-015
 
 ## 概要
-Service の取得・更新エンドポイントを実装する。PUT では `ports` を `pending_ports` に書き込む。
+k8s Serviceのポート設定を管理するエンドポイントを実装する。Serviceレコードはデプロイメント作成時に生成済みのため、更新・取得のみを担当する。
 
-## 実装手順
+## 変更ファイル一覧
 
-### 1. `handler/service.go` を作成
+- `app/src/models/service.go`（編集）
+    - **何を**: Serviceモデルの定義。port・target_port・type（ClusterIP/NodePort/LoadBalancer）フィールドを持つ。pending_*パターンを適用し、pending_port・pending_target_portを保持する。
+    - **なぜ**: k8s Serviceの設定をDBで管理し、applyまでの変更をステージングするため
 
-```go
-package handler
+- `app/src/repository/deployment_repository.go`（編集）
+    - **何を**: ServiceRepositoryインターフェースにFindByDeploymentID・Updateメソッドを追加。
+    - **なぜ**: ServiceのDB操作を抽象化するため
 
-import (
-    "net/http"
-    "github.com/labstack/echo/v4"
-    "app/models"
-    "gorm.io/datatypes"
-    "encoding/json"
-)
+- `app/src/service/deployment_service.go`（編集）
+    - **何を**: GetService・UpdateServiceメソッドをDeploymentServiceに追加。更新はpending_*フィールドへの書き込みのみ。
+    - **なぜ**: Service設定のビジネスロジックをハンドラーから分離するため
 
-func (h *Handler) GetService(c echo.Context) error {
-    deploymentID := c.Param("id")
-    var svc models.Service
-    if err := h.DB.Where("deployment_id = ?", deploymentID).First(&svc).Error; err != nil {
-        return echo.ErrNotFound
-    }
-    return c.JSON(http.StatusOK, svc)
-}
+- `app/src/handler/deployment_handler.go`（編集）
+    - **何を**: GetServiceとUpdateServiceハンドラーの追加。
+    - **なぜ**: Service設定の取得・更新エンドポイントが必要なため
 
-func (h *Handler) UpdateService(c echo.Context) error {
-    deploymentID := c.Param("id")
-    var svc models.Service
-    if err := h.DB.Where("deployment_id = ?", deploymentID).First(&svc).Error; err != nil {
-        return echo.ErrNotFound
-    }
-
-    var req struct {
-        Ports []struct {
-            Protocol string `json:"protocol"`
-            Port     int    `json:"port"`
-        } `json:"ports"`
-    }
-    if err := c.Bind(&req); err != nil {
-        return echo.ErrBadRequest
-    }
-
-    // バリデーション: port 範囲・重複チェック
-    seen := map[string]bool{}
-    for _, p := range req.Ports {
-        if p.Port < 1 || p.Port > 65535 {
-            return c.JSON(http.StatusBadRequest, map[string]string{
-                "error": "port must be between 1 and 65535",
-                "code":  "INVALID_PORT",
-            })
-        }
-        key := fmt.Sprintf("%s:%d", p.Protocol, p.Port)
-        if seen[key] {
-            return c.JSON(http.StatusBadRequest, map[string]string{
-                "error": fmt.Sprintf("duplicate port: %s %d", p.Protocol, p.Port),
-                "code":  "DUPLICATE_PORT",
-            })
-        }
-        seen[key] = true
-    }
-
-    portsJSON, _ := json.Marshal(req.Ports)
-    svc.PendingPorts = datatypes.JSON(portsJSON)
-    h.DB.Save(&svc)
-    return c.JSON(http.StatusOK, svc)
-}
-```
-
-### 2. ルーティング登録
-
-```go
-api.GET("/deployments/:id/service", h.GetService)
-api.PUT("/deployments/:id/service", h.UpdateService)
-```
+- `app/src/router/router.go`（編集）
+    - **何を**: GET/PUT /api/v1/deployments/:id/serviceエンドポイントの登録。
+    - **なぜ**: Serviceエンドポイントをルーターに接続するため
 
 ## テスト確認項目
 
-- [ ] `PUT /service` で `ports` を送ると `pending_ports` に入ること
-- [ ] port が 0 や 65536 の場合にバリデーションエラーになること
-- [ ] 同一 protocol + port の重複で 400 になること
-- [ ] ports が空配列の場合にエラーになること
+- [ ] GET /api/v1/deployments/:id/serviceでService設定が取得できること
+- [ ] PUT /api/v1/deployments/:id/serviceでpending_*フィールドが更新されること
+- [ ] apply後にpending値が実際の値に昇格されること
 
 ### repository 層テスト
 
-- [ ] `ServiceRepository.FindByDeploymentID` でレコードが取得できること
-- [ ] `ServiceRepository.Save` で `pending_ports` フィールドが正しく更新されること
+- [ ] ServiceRepository.FindByDeploymentIDでService設定が取得できること
+- [ ] ServiceRepository.UpdateでService設定が更新できること

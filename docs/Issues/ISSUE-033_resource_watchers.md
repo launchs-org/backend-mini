@@ -1,40 +1,28 @@
-# ISSUE-033 Service / IngressRoute / PVC Watcher
+# ISSUE-033 リソースWatcher群
 
 ## 親 Issue
 ISSUE-031
 
 ## 概要
-Service・PVC の k8s_status を Watch して DB に反映する。
-PVC が削除されたら DB レコードも削除する。
+k8s Service・IngressRoute・PVC・ConfigMap・SecretのWatcherを実装する。各リソースの状態変化に応じてDBのstatusを更新する。
 
-## 実装手順
+## 変更ファイル一覧
 
-### `watcher/service.go`
-
-```go
-func WatchServices(ctx context.Context, db *gorm.DB, client *kubernetes.Clientset) {
-    // Service の Watch
-    // k8s_status を services テーブルに反映
-    // deployment_name ラベルから service レコードを特定
-}
-```
-
-### `watcher/pvc.go`
-
-```go
-func WatchPVCs(ctx context.Context, db *gorm.DB, client *kubernetes.Clientset) {
-    // PVC の Watch
-    // Bound → volumes.status = bound
-    // Deleted → volumes レコードを DB から削除
-}
-```
+- `app/src/k8s/service.go`（編集）
+    - **何を**: WatchServices関数の追加。k8s Service watch APIでイベントを監視してDBのService.statusを更新する。
+    - **なぜ**: k8s Serviceの状態をDBに反映するため
+- `app/src/k8s/ingress_route.go`（編集）
+    - **何を**: WatchIngressRoutes関数の追加。Traefik IngressRoute CRDのイベントを監視してDBのIngressRoute.statusを更新する。
+    - **なぜ**: Traefik IngressRouteの状態をDBに反映するため
+- `app/src/k8s/pvc.go`（編集）
+    - **何を**: WatchPVCs関数の追加。PVCのBound状態を監視してDBのVolume.statusを更新する。
+    - **なぜ**: PVCのバインド状態をDBに反映するため
+- `app/src/main.go`（編集）
+    - **何を**: 各Watcher関数をgoroutineで起動する処理の追加。
+    - **なぜ**: 全Watcherをバックグラウンドで常時起動させるため
 
 ## テスト確認項目
 
-- [ ] PVC が Bound になると `volumes.status = bound` になること
-- [ ] PVC が削除されると `volumes` レコードが DB から削除されること
-
-### repository 層テスト
-
-- [ ] `VolumeRepository.UpdateStatus` で `status = bound` に更新できること
-- [ ] `VolumeRepository.Delete` で PVC 削除時にレコードが DB から削除されること
+- [ ] k8s Serviceのstatusが変化するとDBが更新されること
+- [ ] IngressRouteのstatusが変化するとDBが更新されること
+- [ ] PVCがBoundになるとDBのVolume.statusがboundに更新されること

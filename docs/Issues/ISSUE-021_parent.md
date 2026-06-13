@@ -1,13 +1,10 @@
-# ISSUE-021 [Phase5] Env Var / Env Var Mount
+# ISSUE-021 [Phase5] 環境変数管理
 
 ## Sub Issues
-- [ ] ISSUE-022 Env Var CRUD エンドポイント
-- [ ] ISSUE-023 Env Var Mount CRUD エンドポイント
-- [ ] ISSUE-024 k8s ConfigMap / Secret 生成・apply
-- [ ] ISSUE-025 apply サービスに env 重複チェック・ConfigMap/Secret 追加
+- [ ] ISSUE-022 環境変数CRUD
+- [ ] ISSUE-023 環境変数マウントCRUD
+- [ ] ISSUE-024 k8s ConfigMap・Secret操作
+- [ ] ISSUE-025 Apply拡張（環境変数重複チェック）
 
 ## 完了条件
-- env_var の CRUD が動くこと
-- is_secret=true の value がマスクされること
-- apply 後に k8s ConfigMap / Secret が作成されること
-- env_var_mounts.status が applied になること
+applyでk8s ConfigMapとSecretが作成・更新され、Deploymentにマウントされること

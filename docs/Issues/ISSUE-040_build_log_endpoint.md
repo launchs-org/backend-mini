@@ -1,51 +1,22 @@
-# ISSUE-040 ビルド履歴・ログ取得エンドポイント
+# ISSUE-040 ビルドログエンドポイント
 
 ## 親 Issue
 ISSUE-035
 
-## 実装手順
+## 概要
+k8s JobのPodログをストリーミングまたは一括取得するエンドポイントを実装する。
 
-### `handler/build.go` を作成
+## 変更ファイル一覧
 
-```go
-func (h *Handler) ListBuilds(c echo.Context) error {
-    deploymentID := c.Param("id")
-    var builds []models.DeploymentBuild
-    h.DB.Where("deployment_id = ?", deploymentID).
-        Order("created_at DESC").Find(&builds)
-    return c.JSON(http.StatusOK, builds)
-}
-
-func (h *Handler) GetBuildLog(c echo.Context) error {
-    buildID := c.Param("build_id")
-    var build models.DeploymentBuild
-    if err := h.DB.First(&build, "id = ?", buildID).Error; err != nil {
-        return echo.ErrNotFound
-    }
-
-    since := c.QueryParam("since")
-    until := c.QueryParam("until")
-    log := filterLog(build.BuildLog, since, until)
-
-    return c.JSON(http.StatusOK, map[string]string{"log": log})
-}
-```
-
-### ルーティング登録
-
-```go
-api.GET("/deployments/:id/builds",                  h.ListBuilds)
-api.GET("/deployments/:id/builds/:build_id/logs",   h.GetBuildLog)
-```
+- `app/src/handler/build_handler.go`（編集）
+    - **何を**: GetBuildLogsハンドラーの追加。DeploymentBuild IDからk8s JobのラベルでイコールなアクティブなPodを取得してログを返す。sinceパラメータで時間フィルタリングをサポートする。
+    - **なぜ**: ビルドの進行状況確認のためにログ取得エンドポイントが必要なため
+- `app/src/router/router.go`（編集）
+    - **何を**: GET /api/v1/builds/:id/logsエンドポイントの登録。
+    - **なぜ**: ビルドログエンドポイントをルーターに接続するため
 
 ## テスト確認項目
 
-- [ ] ビルド履歴が新しい順で返ること
-- [ ] since / until でログがフィルタされること
-- [ ] 存在しない build_id で 404 が返ること
-
-### repository 層テスト
-
-- [ ] `DeploymentBuildRepository.FindAllByDeploymentID` で全履歴が新しい順で返ること
-- [ ] `BuildLogRepository.FindByBuildID` で `since` / `until` によるフィルタが正しく動作すること
-- [ ] `DeploymentBuildRepository.FindByID` で存在しない ID を渡すと `ErrRecordNotFound` が返ること
+- [ ] GET /api/v1/builds/:id/logsでビルドログが取得できること
+- [ ] sinceパラメータでログがフィルタされること
+- [ ] Podが存在しない場合に空文字列が返ること

@@ -1,82 +1,20 @@
-# ISSUE-019 k8s Traefik IngressRoute CRD apply
+# ISSUE-019 Traefik IngressRoute操作
 
 ## 親 Issue
 ISSUE-015
 
 ## 概要
-Traefik の IngressRoute CRD を dynamic client で apply する。
+Traefik CRD（IngressRoute）のCRUD操作をdynamic clientで実装する。
 
-## 実装手順
+## 変更ファイル一覧
 
-### 1. `k8s/ingress.go` を作成
-
-Traefik IngressRoute は CRD なので `dynamic.Interface` を使う。
-
-```go
-package k8s
-
-import (
-    "context"
-    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-    "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-    "k8s.io/apimachinery/pkg/runtime/schema"
-    "k8s.io/client-go/dynamic"
-)
-
-var ingressRouteGVR = schema.GroupVersionResource{
-    Group:    "traefik.io",
-    Version:  "v1alpha1",
-    Resource: "ingressroutes",
-}
-
-func ApplyIngressRoute(ctx context.Context, dc dynamic.Interface, namespace, deploymentName, host, pathPrefix, serviceName string, port int) error {
-    obj := &unstructured.Unstructured{
-        Object: map[string]interface{}{
-            "apiVersion": "traefik.io/v1alpha1",
-            "kind":       "IngressRoute",
-            "metadata": map[string]interface{}{
-                "name":      deploymentName,
-                "namespace": namespace,
-            },
-            "spec": map[string]interface{}{
-                "entryPoints": []interface{}{"web", "websecure"},
-                "routes": []interface{}{
-                    map[string]interface{}{
-                        "match": fmt.Sprintf("Host(`%s`) && PathPrefix(`%s`)", host, pathPrefix),
-                        "kind":  "Rule",
-                        "services": []interface{}{
-                            map[string]interface{}{
-                                "name": serviceName,
-                                "port": port,
-                            },
-                        },
-                    },
-                },
-            },
-        },
-    }
-
-    _, err := dc.Resource(ingressRouteGVR).Namespace(namespace).Apply(
-        ctx,
-        deploymentName,
-        obj,
-        metav1.ApplyOptions{FieldManager: "launchs", Force: true},
-    )
-    return err
-}
-
-func DeleteIngressRoute(ctx context.Context, dc dynamic.Interface, namespace, name string) error {
-    return dc.Resource(ingressRouteGVR).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
-}
-```
+- `app/src/k8s/ingress_route.go`（新規作成）
+    - **何を**: ApplyIngressRoute（作成または更新）・DeleteIngressRoute関数の実装。dynamic.Interfaceを使ってTraefik IngressRoute CRDを操作する。ホスト名・パスルールのrouterRule文字列生成。TLS設定の付与。
+    - **なぜ**: Traefik IngressRouteはk8s標準リソースではなくCRDのため、dynamic clientが必要なため
 
 ## テスト確認項目
 
-- [ ] `ApplyIngressRoute` で k8s に IngressRoute が作成されること
-- [ ] `Host` と `PathPrefix` が正しく設定されること
-- [ ] 再 apply で更新されること（Force: true）
-
-### repository 層テスト
-
-- [ ] `IngressRepository.Save` で apply 後の `current_host` が更新されること
-- [ ] `IngressRepository.FindByDeploymentID` で存在しない deployment_id を渡すと `ErrRecordNotFound` が返ること
+- [ ] Traefik IngressRouteが正常に作成されること
+- [ ] 既存IngressRouteが更新されること（冪等性）
+- [ ] TLS設定が正しくManifestに反映されること
+- [ ] IngressRouteが正常に削除されること

@@ -1,7 +1,7 @@
-# ISSUE-047 [Phase11] Pod ログ・ビルドログ取得
+# ISSUE-047 [Phase11] Podログ取得
 
 ## Sub Issues
-- [ ] ISSUE-048 Pod ログ取得エンドポイント
+- [ ] ISSUE-048 Podログ取得エンドポイント
 
 ## 完了条件
-- since / until でログを時間指定で取得できること
+since / untilでログを時間指定で取得できること

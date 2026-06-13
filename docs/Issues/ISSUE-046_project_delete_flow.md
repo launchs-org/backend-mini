@@ -1,69 +1,27 @@
-# ISSUE-046 Project 削除フロー
+# ISSUE-046 Project削除フロー
 
 ## 親 Issue
 ISSUE-044
 
-## 実装手順
+## 概要
+Project削除時に配下の全Deploymentを削除してからk8s Namespaceを削除するフローを実装する。全リソース削除完了後にNamespace WatcherがDBのProjectレコードを削除する。
 
-### `service/project.go` の Delete メソッドを完成
+## 変更ファイル一覧
 
-```go
-func (s *ProjectService) Delete(ctx context.Context, id string) error {
-    var project models.Project
-    if err := s.DB.First(&project, "id = ?", id).Error; err != nil {
-        return err
-    }
-
-    // project を deleting に
-    s.DB.Model(&project).Update("status", models.ProjectStatusDeleting)
-
-    // 配下の全 deployment を deleting に
-    var deployments []models.Deployment
-    s.DB.Where("project_id = ?", id).Find(&deployments)
-
-    for _, d := range deployments {
-        s.DB.Model(&d).Update("status", models.DeploymentStatusDeleting)
-        // k8s リソースを削除
-        DeleteDeploymentResources(ctx, s.DB, s.K8s, s.DynamicClient, d.ID)
-    }
-
-    // env_vars / volumes を deleting に
-    s.DB.Model(&models.EnvVar{}).Where("project_id = ?", id).Update("status", "deleting")
-    s.DB.Model(&models.Volume{}).Where("project_id = ?", id).Update("status", "deleting")
-
-    // 全リソース削除完了を監視する goroutine を起動
-    go s.waitAndDeleteNamespace(ctx, id, project.Namespace)
-
-    return nil
-}
-
-func (s *ProjectService) waitAndDeleteNamespace(ctx context.Context, projectID, namespace string) {
-    for {
-        time.Sleep(5 * time.Second)
-
-        var count int64
-        s.DB.Model(&models.Deployment{}).
-            Where("project_id = ? AND status != ?", projectID, "deleted").
-            Count(&count)
-
-        if count == 0 {
-            // 全リソース削除完了 → namespace を削除
-            k8s.DeleteNamespace(ctx, s.K8s, namespace)
-            return
-        }
-    }
-}
-```
+- `app/src/service/project_service.go`（編集）
+    - **何を**: DeleteProjectメソッドの拡張。Project.statusをdeletingに更新。配下の全Deploymentに対してDeleteDeploymentを実行。EnvVarとVolumeのstatusをdeletingに更新。全Deployment削除完了を監視するgoroutineを起動してk8s Namespaceを削除する。
+    - **なぜ**: Project削除に連動して全リソースを順次削除するため
+- `app/src/repository/deployment_repository.go`（編集）
+    - **何を**: FindAllByProjectIDメソッドとUpdateAllStatusByProjectIDメソッドの追加または確認。
+    - **なぜ**: 削除対象の全Deploymentを取得・一括更新するため
 
 ## テスト確認項目
 
-- [ ] project 削除後に全 deployment が `status = deleting` になること
-- [ ] 全リソース削除後に k8s namespace が削除されること
-- [ ] Watcher が namespace 削除を検知して project DB レコードが削除されること
-- [ ] 削除中の project に新規 deployment を作成すると 409 になること
-
+- [ ] DELETE /api/v1/projects/:id後に全Deploymentがdeletingになること
+- [ ] 全リソース削除後にk8s Namespaceが削除されること
+- [ ] Namespace削除後にWatcherがProjectレコードを削除すること
+- [ ] 削除中のProjectに新規Deployment作成で409が返ること
 ### repository 層テスト
 
-- [ ] `DeploymentRepository.FindAllByProjectID` で全 deployment が取得できること
-- [ ] `DeploymentRepository.UpdateStatus` で全 deployment を `status = deleting` に一括更新できること
-- [ ] `ProjectRepository.Delete` でレコードが DB から削除されること
+- [ ] ProjectRepository.DeleteでProjectレコードが削除できること
+- [ ] DeploymentRepository.FindAllByProjectIDで全Deploymentが取得できること

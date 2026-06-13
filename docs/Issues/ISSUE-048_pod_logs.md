@@ -1,80 +1,28 @@
-# ISSUE-048 Pod ログ取得エンドポイント
+# ISSUE-048 Podログ取得エンドポイント
 
 ## 親 Issue
 ISSUE-047
 
-## 実装手順
+## 概要
+running状態のDeploymentのPodログを取得するエンドポイントを実装する。app=deployment_nameラベルでPodを特定し、sinceパラメータで時間フィルタリングをサポートする。
 
-### `handler/log.go` を作成
+## 変更ファイル一覧
 
-```go
-package handler
+- `app/src/handler/log_handler.go`（新規作成）
+    - **何を**: GetPodLogsハンドラーの実装。URLパラメータからdeploymentIDを取得してDeploymentとProjectを解決する。k8s CoreV1 Pods APIでapp=deployment_nameラベルのPodを検索してログを取得する。sinceクエリパラメータ（RFC3339形式）でSinceTimeを設定する。containerクエリパラメータで対象コンテナを指定できる。
+    - **なぜ**: ユーザーがDeploymentの実行ログを確認するためのエンドポイントが必要なため
 
-import (
-    "bytes"
-    "io"
-    "time"
-    corev1 "k8s.io/api/core/v1"
-    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
-
-func (h *Handler) GetPodLogs(c echo.Context) error {
-    deploymentID := c.Param("id")
-
-    var d models.Deployment
-    if err := h.DB.First(&d, "id = ?", deploymentID).Error; err != nil {
-        return echo.ErrNotFound
-    }
-    var project models.Project
-    h.DB.First(&project, "id = ?", d.ProjectID)
-
-    // Pod を deployment name のラベルで特定
-    pods, err := h.K8s.CoreV1().Pods(project.Namespace).List(
-        c.Request().Context(),
-        metav1.ListOptions{LabelSelector: "app=" + d.Name},
-    )
-    if err != nil || len(pods.Items) == 0 {
-        return c.JSON(http.StatusOK, map[string]string{"logs": ""})
-    }
-
-    opts := &corev1.PodLogOptions{}
-
-    if since := c.QueryParam("since"); since != "" {
-        t, _ := time.Parse(time.RFC3339, since)
-        sinceTime := metav1.NewTime(t)
-        opts.SinceTime = &sinceTime
-    }
-
-    container := c.QueryParam("container")
-    if container != "" { opts.Container = container }
-
-    req := h.K8s.CoreV1().Pods(project.Namespace).GetLogs(pods.Items[0].Name, opts)
-    stream, err := req.Stream(c.Request().Context())
-    if err != nil {
-        return echo.ErrInternalServerError
-    }
-    defer stream.Close()
-
-    var buf bytes.Buffer
-    io.Copy(&buf, stream)
-
-    return c.JSON(http.StatusOK, map[string]string{"logs": buf.String()})
-}
-```
-
-### ルーティング登録
-
-```go
-api.GET("/deployments/:id/logs", h.GetPodLogs)
-```
+- `app/src/router/router.go`（編集）
+    - **何を**: GET /api/v1/deployments/:id/logsエンドポイントの登録。
+    - **なぜ**: Podログエンドポイントをルーターに接続するため
 
 ## テスト確認項目
 
-- [ ] running な deployment のログが取得できること
-- [ ] `since` パラメータでログがフィルタされること
-- [ ] Pod が存在しない場合に空文字列が返ること
-- [ ] `container` パラメータで特定コンテナのログが取得できること
+- [ ] running状態のDeploymentのPodログが取得できること
+- [ ] sinceパラメータでログがフィルタされること
+- [ ] containerパラメータで特定コンテナのログが取得できること
+- [ ] Podが存在しない場合に空文字列が返ること
 
 ### repository 層テスト
 
-- [ ] `DeploymentRepository.FindByID` で `status = running` のレコードが取得できること
+- [ ] DeploymentRepository.FindByIDでstatus=runningのレコードが取得できること

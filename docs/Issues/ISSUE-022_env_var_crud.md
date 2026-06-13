@@ -1,122 +1,42 @@
-# ISSUE-022 Env Var CRUD エンドポイント
+# ISSUE-022 環境変数CRUD
 
 ## 親 Issue
 ISSUE-021
 
 ## 概要
-Project に属する env_var の作成・取得・更新・削除を実装する。
-is_secret=true の場合 GET で value を "***" にマスクする。
+環境変数のCRUDエンドポイントを実装する。環境変数はプロジェクトスコープで管理し、デプロイメントへのマウントは別途行う。
 
-## 実装手順
+## 変更ファイル一覧
 
-### 1. `handler/env_var.go` を作成
+- `app/src/models/env_var.go`（編集）
+    - **何を**: EnvVarモデルの定義。ProjectIDへの外部キー、key・value・is_secretフィールドを持つ。is_secretがtrueの場合はk8s Secretに格納される。
+    - **なぜ**: 環境変数エンティティのDB表現を定義するため
 
-```go
-package handler
+- `app/src/repository/env_var_repository.go`（新規作成）
+    - **何を**: EnvVarRepositoryインターフェースと実装。Create・FindByID・FindAllByProjectID・Update・Deleteメソッドを持つ。
+    - **なぜ**: 環境変数のDB操作を抽象化するため
 
-func (h *Handler) ListEnvVars(c echo.Context) error {
-    projectID := c.Param("id")
-    var vars []models.EnvVar
-    h.DB.Where("project_id = ? AND status != ?", projectID, "deleted").Find(&vars)
+- `app/src/service/env_var_service.go`（新規作成）
+    - **何を**: EnvVarServiceインターフェースと実装。ListEnvVars・CreateEnvVar・UpdateEnvVar・DeleteEnvVarのCRUD。
+    - **なぜ**: 環境変数管理のビジネスロジックをハンドラーから分離するため
 
-    // is_secret=true の value をマスク
-    for i := range vars {
-        if vars[i].IsSecret {
-            vars[i].Value = "***"
-        }
-    }
-    return c.JSON(http.StatusOK, vars)
-}
+- `app/src/handler/env_var_handler.go`（新規作成）
+    - **何を**: ListEnvVars・CreateEnvVar・UpdateEnvVar・DeleteEnvVarハンドラーの実装。
+    - **なぜ**: 環境変数CRUDのHTTPエントリーポイントが必要なため
 
-func (h *Handler) CreateEnvVar(c echo.Context) error {
-    projectID := c.Param("id")
-    var req struct {
-        Key      string `json:"key"`
-        Value    string `json:"value"`
-        IsSecret bool   `json:"is_secret"`
-    }
-    if err := c.Bind(&req); err != nil {
-        return echo.ErrBadRequest
-    }
-
-    // key のバリデーション（英数字・アンダースコアのみ）
-    for _, ch := range req.Key {
-        if !((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') ||
-            (ch >= '0' && ch <= '9') || ch == '_') {
-            return c.JSON(http.StatusBadRequest, map[string]string{
-                "error": "key must be alphanumeric or underscore",
-                "code":  "INVALID_KEY",
-            })
-        }
-    }
-
-    ev := models.EnvVar{
-        ProjectID: projectID,
-        Key:       req.Key,
-        Value:     req.Value,
-        IsSecret:  req.IsSecret,
-        Status:    "active",
-    }
-    h.DB.Create(&ev)
-    return c.JSON(http.StatusCreated, ev)
-}
-
-func (h *Handler) UpdateEnvVar(c echo.Context) error {
-    var ev models.EnvVar
-    if err := h.DB.First(&ev, "id = ?", c.Param("id")).Error; err != nil {
-        return echo.ErrNotFound
-    }
-    var req struct {
-        Value *string `json:"value"`
-    }
-    if err := c.Bind(&req); err != nil {
-        return echo.ErrBadRequest
-    }
-    if req.Value != nil {
-        ev.Value = *req.Value
-        h.DB.Save(&ev)
-    }
-    return c.JSON(http.StatusOK, ev)
-}
-
-func (h *Handler) DeleteEnvVar(c echo.Context) error {
-    var ev models.EnvVar
-    if err := h.DB.First(&ev, "id = ?", c.Param("id")).Error; err != nil {
-        return echo.ErrNotFound
-    }
-    // mount されている場合は削除不可
-    var count int64
-    h.DB.Model(&models.EnvVarMount{}).Where("env_var_id = ?", ev.ID).Count(&count)
-    if count > 0 {
-        return c.JSON(http.StatusConflict, map[string]string{
-            "error": "env_var is mounted to deployments",
-            "code":  "ENV_VAR_MOUNTED",
-        })
-    }
-    h.DB.Model(&ev).Update("status", "deleting")
-    return c.NoContent(http.StatusNoContent)
-}
-```
-
-### 2. ルーティング登録
-
-```go
-api.GET("/projects/:id/env-vars",  h.ListEnvVars)
-api.POST("/projects/:id/env-vars", h.CreateEnvVar)
-api.PUT("/env-vars/:id",           h.UpdateEnvVar)
-api.DELETE("/env-vars/:id",        h.DeleteEnvVar)
-```
+- `app/src/router/router.go`（編集）
+    - **何を**: GET/POST /api/v1/projects/:id/env-vars、GET/PUT/DELETE /api/v1/env-vars/:idエンドポイントの登録。
+    - **なぜ**: 環境変数CRUDエンドポイントをルーターに接続するため
 
 ## テスト確認項目
 
-- [ ] `is_secret=true` の env_var を GET すると value が `"***"` になること
-- [ ] key に記号が含まれると 400 になること
-- [ ] mount されている env_var を DELETE すると 409 になること
-- [ ] value の PUT が即時反映されること
+- [ ] POST /api/v1/projects/:id/env-varsで環境変数が作成できること
+- [ ] GET /api/v1/projects/:id/env-varsで環境変数一覧が取得できること
+- [ ] PUT /api/v1/env-vars/:idで環境変数が更新できること
+- [ ] DELETE /api/v1/env-vars/:idで環境変数が削除できること
+- [ ] is_secret=trueの環境変数の値がレスポンスでマスクされること
 
 ### repository 層テスト
 
-- [ ] `EnvVarRepository.Create` でレコードが DB に保存されること
-- [ ] `EnvVarRepository.FindByID` で `is_secret=true` のレコードが取得できること
-- [ ] `EnvVarRepository.Delete` でマウント済みの場合は削除が阻止されること（外部キー制約または service 層チェック）
-- [ ] `EnvVarRepository.Save` で value の更新が即時反映されること
+- [ ] EnvVarRepository.Createで環境変数が作成できること
+- [ ] EnvVarRepository.FindAllByProjectIDでプロジェクトの環境変数一覧が取得できること

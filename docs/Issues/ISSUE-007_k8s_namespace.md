@@ -1,45 +1,20 @@
-# ISSUE-007 k8s Namespace 作成・削除
+# ISSUE-007 k8s Namespace管理
 
 ## 親 Issue
 ISSUE-005
 
 ## 概要
-k8s namespace の作成・削除ロジックを実装する。Project の作成・削除から呼び出す。
+プロジェクト作成・削除に連動してk8s Namespaceを作成・削除する関数を実装する。
 
-## 実装手順
+## 変更ファイル一覧
 
-### 1. `k8s/namespace.go` を作成
-
-```go
-package k8s
-
-import (
-    "context"
-    corev1 "k8s.io/api/core/v1"
-    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-    "k8s.io/client-go/kubernetes"
-)
-
-func CreateNamespace(ctx context.Context, client *kubernetes.Clientset, name string) error {
-    ns := &corev1.Namespace{
-        ObjectMeta: metav1.ObjectMeta{
-            Name: name,
-            Labels: map[string]string{
-                "launchs.org/managed": "true",
-            },
-        },
-    }
-    _, err := client.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
-    return err
-}
-
-func DeleteNamespace(ctx context.Context, client *kubernetes.Clientset, name string) error {
-    return client.CoreV1().Namespaces().Delete(ctx, name, metav1.DeleteOptions{})
-}
-```
+- `app/src/k8s/namespace.go`（編集）
+    - **何を**: CreateNamespace・DeleteNamespace関数の実装。名前空間の存在確認と冪等な作成・削除を行う。
+    - **なぜ**: プロジェクトごとにk8sの分離環境（Namespace）が必要なため
 
 ## テスト確認項目
 
-- [ ] `CreateNamespace` で k8s に namespace が作られること
-- [ ] `DeleteNamespace` で k8s から namespace が削除されること
-- [ ] 同名 namespace を2回作成するとエラーになること
+- [ ] Namespaceが正常に作成されること
+- [ ] 既存Namespaceへの作成が冪等に動作すること
+- [ ] Namespaceが正常に削除されること
+- [ ] 存在しないNamespace削除が冪等に動作すること

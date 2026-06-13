@@ -1,56 +1,36 @@
-# ISSUE-036 ビルド判定ロジック・HEAD SHA 解決
+# ISSUE-036 ビルドトリガーエンドポイント
 
 ## 親 Issue
 ISSUE-035
 
 ## 概要
-apply 時にビルドが必要かどうかを判定し、commit_sha が HEAD の場合は GitHub API で実 SHA を取得する。
+デプロイメントのビルドを開始するエンドポイントを実装する。DeploymentBuildレコードを作成してk8s Jobをトリガーする。
 
-## 実装手順
+## 変更ファイル一覧
 
-### 1. `service/apply.go` に追加
-
-```go
-// HEAD SHA 解決
-func resolveCommitSHA(ctx context.Context, repoURL, branch, sha string) (string, error) {
-    if sha != "HEAD" { return sha, nil }
-
-    // GitHub API: GET https://api.github.com/repos/{owner}/{repo}/commits/{branch}
-    // パブリックリポジトリのみ対応（認証不要）
-    parts := parseGithubURL(repoURL) // owner / repo を抽出
-    url := fmt.Sprintf("https://api.github.com/repos/%s/%s/commits/%s", parts.Owner, parts.Repo, branch)
-
-    resp, err := http.Get(url)
-    if err != nil { return "", err }
-    defer resp.Body.Close()
-
-    var result struct {
-        SHA string `json:"sha"`
-    }
-    json.NewDecoder(resp.Body).Decode(&result)
-    return result.SHA, nil
-}
-
-// ビルド要否判定
-func needsBuild(d models.Deployment) bool {
-    if d.Type == models.DeploymentTypeImageURL { return false }
-
-    return d.PendingGithubRepoURL != d.GithubRepoURL ||
-        d.PendingGithubBranch != d.GithubBranch ||
-        d.PendingGithubCommitSHA != d.GithubCommitSHA ||
-        d.PendingGithubRepoDirectory != d.GithubRepoDirectory ||
-        d.PendingDockerfilePath != d.DockerfilePath
-}
-```
+- `app/src/models/deployment_build.go`（編集）
+    - **何を**: DeploymentBuildモデルの定義。DeploymentIDへの外部キー、build_type（dockerfile/railpack）、status（pending/building/succeeded/failed/canceled）、github_repo_url・github_branch・commit_shaフィールドを持つ。
+    - **なぜ**: ビルドの実行状態と結果をDBで管理するため
+- `app/src/repository/deployment_build_repository.go`（新規作成）
+    - **何を**: DeploymentBuildRepositoryインターフェースと実装。Create・FindByID・FindAllByDeploymentID・UpdateStatusメソッドを持つ。
+    - **なぜ**: ビルドレコードのDB操作を抽象化するため
+- `app/src/service/build_service.go`（新規作成）
+    - **何を**: BuildServiceインターフェースと実装。TriggerBuildメソッドの実装。DeploymentBuildレコードをpendingで作成後にk8s Jobを起動する。ビルドタイプに応じてdockerfile/railpackのJobを生成する。
+    - **なぜ**: ビルドトリガーのビジネスロジックをハンドラーから分離するため
+- `app/src/handler/build_handler.go`（新規作成）
+    - **何を**: TriggerBuildハンドラーの実装。
+    - **なぜ**: ビルドトリガーのHTTPエントリーポイントが必要なため
+- `app/src/router/router.go`（編集）
+    - **何を**: POST /api/v1/deployments/:id/buildエンドポイントの登録。
+    - **なぜ**: ビルドトリガーエンドポイントをルーターに接続するため
 
 ## テスト確認項目
 
-- [ ] `github_commit_sha = "HEAD"` が GitHub API から取得した実 SHA に変換されること
-- [ ] image_url 型でビルド不要と判定されること
-- [ ] GitHub 情報が変化していない場合にビルド不要と判定されること
-- [ ] GitHub 情報が変化している場合にビルド必要と判定されること
-
+- [ ] POST /api/v1/deployments/:id/buildでビルドがトリガーされること
+- [ ] DeploymentBuildレコードがpendingで作成されること
+- [ ] k8s Jobが作成されること
+- [ ] ビルド中のDeploymentに再ビルドをトリガーすると409が返ること
 ### repository 層テスト
 
-- [ ] `DeploymentBuildRepository.Create` でレコードが DB に保存されること
-- [ ] `DeploymentRepository.FindByID` で `pending_github_commit_sha` が取得できること
+- [ ] DeploymentBuildRepository.Createでビルドレコードが作成できること
+- [ ] DeploymentBuildRepository.UpdateStatusでstatusが更新できること

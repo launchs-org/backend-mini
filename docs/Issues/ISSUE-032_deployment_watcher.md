@@ -4,112 +4,22 @@
 ISSUE-031
 
 ## 概要
-k8s Deployment の変化を Watch し、k8s_status と app_status を DB に反映する。
-RetryWatcher を使って切断時に自動再接続する。
+k8s Deploymentリソースの状態変化を監視して、DBのDeploymentのstatusとapp_statusを自動更新するWatcherを実装する。
 
-## 実装手順
+## 変更ファイル一覧
 
-### 1. `cmd/watcher/main.go` を作成
-
-```go
-package main
-
-import (
-    "context"
-    "log"
-    "app/config"
-    "app/repository"
-    "app/k8s"
-    "app/watcher"
-)
-
-func main() {
-    cfg := config.Load()
-    database, _ := db.New(cfg.DatabaseDSN)
-    k8sClient, _ := k8s.NewClient()
-
-    ctx := context.Background()
-    log.Println("Starting watcher...")
-
-    go watcher.WatchDeployments(ctx, database, k8sClient)
-    go watcher.WatchServices(ctx, database, k8sClient)
-    go watcher.WatchPVCs(ctx, database, k8sClient)
-    go watcher.WatchNamespaces(ctx, database, k8sClient)
-
-    select {} // ブロック
-}
-```
-
-### 2. `watcher/deployment.go` を作成
-
-```go
-package watcher
-
-import (
-    "context"
-    "encoding/json"
-    appsv1 "k8s.io/api/apps/v1"
-    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-    "k8s.io/apimachinery/pkg/watch"
-    "k8s.io/client-go/kubernetes"
-    "gorm.io/gorm"
-    "app/models"
-)
-
-func WatchDeployments(ctx context.Context, db *gorm.DB, client *kubernetes.Clientset) {
-    for {
-        watcher, err := client.AppsV1().Deployments("").Watch(ctx, metav1.ListOptions{
-            LabelSelector: "launchs.org/managed=true",
-        })
-        if err != nil {
-            time.Sleep(5 * time.Second)
-            continue
-        }
-
-        for event := range watcher.ResultChan() {
-            dep, ok := event.Object.(*appsv1.Deployment)
-            if !ok { continue }
-
-            deploymentID := dep.Labels["launchs.org/deployment-id"]
-            if deploymentID == "" { continue }
-
-            statusJSON, _ := json.Marshal(dep.Status)
-
-            switch event.Type {
-            case watch.Modified, watch.Added:
-                updates := map[string]interface{}{
-                    "k8s_status": statusJSON,
-                }
-                // Pod が全て Ready → app_status = running
-                if dep.Status.ReadyReplicas > 0 &&
-                    dep.Status.ReadyReplicas == dep.Status.Replicas {
-                    updates["app_status"] = models.AppStatusRunning
-                    updates["status"] = models.DeploymentStatusRunning
-                }
-                db.Model(&models.Deployment{}).
-                    Where("id = ?", deploymentID).
-                    Updates(updates)
-
-            case watch.Deleted:
-                db.Model(&models.Deployment{}).
-                    Where("id = ?", deploymentID).
-                    Update("status", models.DeploymentStatusFailed)
-            }
-        }
-
-        // watcher が切れたら再接続
-        time.Sleep(1 * time.Second)
-    }
-}
-```
+- `app/src/k8s/deployment.go`（編集）
+    - **何を**: WatchDeployments関数の追加。k8s watch APIを使ってDeploymentの追加・変更・削除イベントを監視する。launchs.org/deployment-idラベルでDeploymentを特定し、ReadyReplicasの状態からapp_statusを計算してDBを更新する。Deleted イベントでDBレコードを削除する。
+    - **なぜ**: k8s側の実際のデプロイ状態をDBに反映するため
+- `app/src/main.go`（編集）
+    - **何を**: アプリ起動時にgoroutineでWatchDeployments()を起動する処理の追加。
+    - **なぜ**: Watcherをバックグラウンドで常時起動させるため
 
 ## テスト確認項目
 
-- [ ] apply 後に Watcher が `k8s_status` を更新すること
-- [ ] Pod が Ready になると `app_status = running` になること
-- [ ] Watcher プロセスが k8s 切断後に再接続すること
-
+- [ ] k8s DeploymentがRunningになるとDBのapp_statusがrunningに更新されること
+- [ ] k8s DeploymentがPendingのときDBのapp_statusがdeployingに更新されること
+- [ ] k8s DeploymentがDeletedになるとDBレコードが削除されること
 ### repository 層テスト
 
-- [ ] `DeploymentRepository.UpdateStatus` で `k8s_status` が更新されること
-- [ ] `DeploymentRepository.UpdateStatus` で `app_status = running` に更新できること
+- [ ] DeploymentRepository.UpdateAppStatusでapp_statusが更新できること

@@ -4,26 +4,21 @@
 ISSUE-031
 
 ## 概要
-Namespace の削除完了を Watch し、project DB レコードを削除する。
+k8s Namespaceの削除イベントを監視して、Project削除フローの完了処理（DBレコード削除）を行うWatcherを実装する。
 
-## 実装手順
+## 変更ファイル一覧
 
-### `watcher/namespace.go`
-
-```go
-func WatchNamespaces(ctx context.Context, db *gorm.DB, client *kubernetes.Clientset) {
-    // Namespace の Watch
-    // Deleted イベント → launchs.org/managed ラベルが付いている場合のみ処理
-    // namespace 名から project を特定して DB レコード削除
-}
-```
+- `app/src/k8s/namespace.go`（編集）
+    - **何を**: WatchNamespaces関数の追加。k8s Namespace watch APIでDeletedイベントを監視する。launchs.org/project-idラベルでProjectを特定し、DBのProjectレコードを削除する。
+    - **なぜ**: Namespace削除完了をトリガーにProjectのDB削除を行うため
+- `app/src/main.go`（編集）
+    - **何を**: goroutineでWatchNamespaces()を起動する処理の追加。
+    - **なぜ**: Namespace WatcherをバックグラウンドでDB削除をトリガーするため
 
 ## テスト確認項目
 
-- [ ] namespace が削除されると `projects` レコードが DB から削除されること
-- [ ] launchs.org/managed ラベルがない namespace は無視されること
-
+- [ ] k8s NamespaceのDeletedイベントでDBのProjectレコードが削除されること
+- [ ] 他プロジェクトのNamespace削除イベントで別プロジェクトに影響しないこと
 ### repository 層テスト
 
-- [ ] `ProjectRepository.FindByNamespace` で namespace 名からプロジェクトが取得できること
-- [ ] `ProjectRepository.Delete` で namespace 削除時にプロジェクトレコードが DB から削除されること
+- [ ] ProjectRepository.DeleteでProjectレコードが削除できること

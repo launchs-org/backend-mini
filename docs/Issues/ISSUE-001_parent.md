@@ -1,18 +1,9 @@
-# ISSUE-001 [Phase1] プロジェクト基盤セットアップ
-
-## 概要
-
-Echo の Hello World が動いている状態から、DB 接続・k8s クライアント初期化・AutoMigrate までを整備する。
-このフェーズが完了すると全フェーズの土台が整う。
+# ISSUE-001 [Phase1] 基盤セットアップ
 
 ## Sub Issues
-
-- [ ] ISSUE-002 DB 接続・AutoMigrate セットアップ
-- [ ] ISSUE-003 k8s クライアント初期化
-- [ ] ISSUE-004 ディレクトリ構成・Router 整備
+- [ ] ISSUE-002 DB接続・マイグレーション設定
+- [ ] ISSUE-003 Kubernetesクライアント初期化
+- [ ] ISSUE-004 Echoルーター設定
 
 ## 完了条件
-
-- サーバーが起動して DB に接続できること
-- k8s クラスターに接続できること
-- 全モデルの AutoMigrate が通ること
+アプリケーション起動に必要な基盤（DB・k8s・HTTP）が動作すること
