@@ -79,11 +79,3 @@ tasks:
   logs:backend:
     cmds:
       - docker compose logs -f app
-
-  # テストを実行するコマンド
-  test-all:
-    cmds:
-      # テスト用コンテナをビルドして起動し、テストを実行する
-      - docker compose -f docker-compose-test.yaml up --build --abort-on-container-exit --exit-code-from app-test
-      # テスト終了後にコンテナとボリュームを削除する
-      - docker compose -f docker-compose-test.yaml down -v
