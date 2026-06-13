@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-GitHub Issue 作成スクリプト
+GitHub Issue 同期スクリプト
 docs/Issues/ 以下のマークダウンファイルを読み込み、
-gh コマンドで GitHub Issue を作成する。
+gh コマンドで GitHub Issue を作成または更新する。
+既存 Issue はタイトル先頭の "ISSUE-XXX" で照合する（タイトル変更後も正しく更新される）。
 Parent Issue には Sub Issue のリンクを追加し、
 Sub Issue には親 Issue のリンクを追加する。
 """
@@ -12,6 +13,7 @@ import re
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 from dataclasses import dataclass, field
 
@@ -32,15 +34,29 @@ class IssueData:
     github_number: int | None = None  # 作成後の GitHub Issue 番号
 
 
-def run_gh(args: list[str]) -> str:
-    """gh コマンドを実行して stdout を返す"""
-    result = subprocess.run(
-        ["gh"] + args,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return result.stdout.strip()
+def run_gh(args: list[str], retries: int = 3, delay: float = 5.0) -> str:
+    """gh コマンドを実行して stdout を返す。タイムアウト時はリトライする。"""
+    last_error = None
+    for attempt in range(1, retries + 1):
+        result = subprocess.run(
+            ["gh"] + args,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+        last_error = subprocess.CalledProcessError(
+            result.returncode,
+            ["gh"] + args,
+            output=result.stdout,
+            stderr=result.stderr,
+        )
+        if "timeout" in result.stderr.lower() or "i/o timeout" in result.stderr.lower():
+            print(f" [タイムアウト、{delay}秒後にリトライ {attempt}/{retries}]", end="", flush=True)
+            time.sleep(delay)
+            continue
+        raise last_error
+    raise last_error
 
 
 def parse_issue_file(file_path: Path) -> IssueData:
@@ -94,10 +110,11 @@ def load_all_issues() -> dict[int, IssueData]:
     return issues
 
 
-def get_existing_issues() -> dict[str, int]:
+def get_existing_issues() -> dict[int, int]:
     """
     既存の GitHub Issue を取得する。
-    title -> github_number のマッピングを返す。
+    issue_number (ISSUE-XXX の番号) -> github_number のマッピングを返す。
+    タイトル先頭の "ISSUE-NNN" で照合するため、タイトルが変わっても正しく対応できる。
     """
     print("既存の GitHub Issue を取得中...")
     output = run_gh([
@@ -108,7 +125,12 @@ def get_existing_issues() -> dict[str, int]:
         "--json", "number,title",
     ])
     issue_list = json.loads(output)
-    return {item["title"]: item["number"] for item in issue_list}
+    result: dict[int, int] = {}
+    for item in issue_list:
+        match = re.match(r"ISSUE-(\d+)", item["title"])
+        if match:
+            result[int(match.group(1))] = item["number"]
+    return result
 
 
 def build_issue_body(issue_data: IssueData, issues: dict[int, IssueData]) -> str:
@@ -166,11 +188,12 @@ def create_issue(issue_data: IssueData, body: str) -> int:
     return int(number_match.group(1))
 
 
-def update_issue_body(github_number: int, new_body: str):
-    """既存 Issue の本文を更新する"""
+def update_issue(github_number: int, new_title: str, new_body: str):
+    """既存 Issue のタイトルと本文を更新する"""
     run_gh([
         "issue", "edit", str(github_number),
         "--repo", REPO,
+        "--title", new_title,
         "--body", new_body,
     ])
 
@@ -200,14 +223,14 @@ def main():
         if issue_data.is_parent:
             continue  # parent は後で作成する
 
-        if issue_data.title in existing:
-            issue_data.github_number = existing[issue_data.title]
+        if issue_data.issue_number in existing:
+            issue_data.github_number = existing[issue_data.issue_number]
             print(
                 f"  本文更新 (既存 #{issue_data.github_number}): {issue_data.title} ...",
                 end="",
                 flush=True,
             )
-            update_issue_body(issue_data.github_number, issue_data.body)
+            update_issue(issue_data.github_number, issue_data.title, issue_data.body)
             print(" 完了")
             continue
 
@@ -225,12 +248,12 @@ def main():
 
         body_with_links = build_issue_body(issue_data, issues)
 
-        if issue_data.title in existing:
-            issue_data.github_number = existing[issue_data.title]
+        if issue_data.issue_number in existing:
+            issue_data.github_number = existing[issue_data.issue_number]
             print(
                 f"  本文更新 (既存 #{issue_data.github_number}): {issue_data.title}"
             )
-            update_issue_body(issue_data.github_number, body_with_links)
+            update_issue(issue_data.github_number, issue_data.title, body_with_links)
             continue
 
         print(
@@ -256,7 +279,7 @@ def main():
                 f"-> 親 #{parent.github_number}"
             )
             new_body = build_issue_body(issue_data, issues)
-            update_issue_body(issue_data.github_number, new_body)
+            update_issue(issue_data.github_number, issue_data.title, new_body)
 
     # ===== 完了サマリー =====
     print("\n=== 完了 ===")
@@ -267,4 +290,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except subprocess.CalledProcessError as error:
+        print(f"\n[ERROR] gh コマンド失敗: {' '.join(error.cmd)}")
+        print(f"  stderr: {error.stderr}")
+        sys.exit(1)
