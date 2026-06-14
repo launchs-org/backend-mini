@@ -70,9 +70,10 @@ func main() {
 	projectHandler := handler.NewProjectHandler(projectServiceImpl)                                              // project ハンドラーを生成する
 
 	// deployment ハンドラーを DI 組み立てする
-	deploymentRepo := repository.NewDeploymentRepository(repository.Database)                     // deployment リポジトリを生成する
-	serviceRepo := repository.NewServiceRepository(repository.Database)                           // service リポジトリを生成する
-	deploymentServiceImpl := service.NewDeploymentService(deploymentRepo, serviceRepo, projectRepo) // deployment サービスを生成する
+	deploymentRepo := repository.NewDeploymentRepository(repository.Database)                                              // deployment リポジトリを生成する
+	serviceRepo := repository.NewServiceRepository(repository.Database)                                                    // service リポジトリを生成する
+	ingressRouteRepo := repository.NewIngressRouteRepository(repository.Database)                                          // ingress_route リポジトリを生成する
+	deploymentServiceImpl := service.NewDeploymentService(deploymentRepo, serviceRepo, projectRepo, ingressRouteRepo)      // deployment サービスを生成する
 	applyHistoryRepo := repository.NewApplyHistoryRepository(repository.Database)                 // apply_history リポジトリを生成する
 	applyServiceImpl := service.NewApplyService(repository.Database, k8sClient, deploymentRepo, applyHistoryRepo, projectRepo) // apply サービスを生成する
 	deploymentHandler := handler.NewDeploymentHandler(deploymentServiceImpl, applyServiceImpl)    // deployment ハンドラーを生成する

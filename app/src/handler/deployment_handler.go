@@ -216,6 +216,92 @@ func (deploymentHandler *DeploymentHandler) UpdateService(echoCtx echo.Context) 
 	return echoCtx.JSON(http.StatusOK, serviceData) // 更新後の service を返す
 }
 
+// GetIngressRoute は GET /deployments/:id/ingress-route のハンドラー
+func (deploymentHandler *DeploymentHandler) GetIngressRoute(echoCtx echo.Context) error {
+	userID := echoCtx.Get("UserID").(string) // ミドルウェアがセットした UserID を取得する
+	deploymentID := echoCtx.Param("id")      // パスパラメータから deployment ID を取得する
+
+	ingressRouteData, err := deploymentHandler.deploymentService.GetIngressRoute(echoCtx.Request().Context(), userID, deploymentID) // サービスを呼び出して ingress_route 設定を取得する
+	if err != nil {                                                                                                                   // エラーが発生した場合
+		if errors.Is(err, service.ErrForbidden) { // 所有者でない場合は 403 を返す
+			return echoCtx.JSON(http.StatusForbidden, map[string]string{
+				"error": "アクセスが禁止されています",
+			})
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) { // レコードが存在しない場合は 404 を返す
+			return echoCtx.JSON(http.StatusNotFound, map[string]string{
+				"error": "リソースが見つかりません",
+			})
+		}
+		return echoCtx.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "内部サーバーエラー",
+		})
+	}
+	return echoCtx.JSON(http.StatusOK, ingressRouteData) // ingress_route 設定を返す
+}
+
+// CreateIngressRoute は POST /deployments/:id/ingress-route のハンドラー
+func (deploymentHandler *DeploymentHandler) CreateIngressRoute(echoCtx echo.Context) error {
+	userID := echoCtx.Get("UserID").(string) // ミドルウェアがセットした UserID を取得する
+	deploymentID := echoCtx.Param("id")      // パスパラメータから deployment ID を取得する
+
+	var requestBody service.CreateIngressRouteRequest             // リクエストボディの構造体を定義する
+	if err := echoCtx.Bind(&requestBody); err != nil {           // リクエストをバインドする
+		return echoCtx.JSON(http.StatusBadRequest, map[string]string{
+			"error": "リクエストが不正です",
+		})
+	}
+
+	ingressRouteData, err := deploymentHandler.deploymentService.CreateIngressRoute(echoCtx.Request().Context(), userID, deploymentID, requestBody) // サービスを呼び出して ingress_route を作成する
+	if err != nil {                                                                                                                                    // エラーが発生した場合
+		if errors.Is(err, service.ErrForbidden) { // 所有者でない場合は 403 を返す
+			return echoCtx.JSON(http.StatusForbidden, map[string]string{
+				"error": "アクセスが禁止されています",
+			})
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) { // deployment が存在しない場合は 404 を返す
+			return echoCtx.JSON(http.StatusNotFound, map[string]string{
+				"error": "リソースが見つかりません",
+			})
+		}
+		return echoCtx.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "内部サーバーエラー",
+		})
+	}
+	return echoCtx.JSON(http.StatusCreated, ingressRouteData) // 作成した ingress_route を返す
+}
+
+// UpdateIngressRoute は PUT /deployments/:id/ingress-route のハンドラー
+func (deploymentHandler *DeploymentHandler) UpdateIngressRoute(echoCtx echo.Context) error {
+	userID := echoCtx.Get("UserID").(string) // ミドルウェアがセットした UserID を取得する
+	deploymentID := echoCtx.Param("id")      // パスパラメータから deployment ID を取得する
+
+	var requestBody service.UpdateIngressRouteRequest             // リクエストボディの構造体を定義する
+	if err := echoCtx.Bind(&requestBody); err != nil {           // リクエストをバインドする
+		return echoCtx.JSON(http.StatusBadRequest, map[string]string{
+			"error": "リクエストが不正です",
+		})
+	}
+
+	ingressRouteData, err := deploymentHandler.deploymentService.UpdateIngressRoute(echoCtx.Request().Context(), userID, deploymentID, requestBody) // サービスを呼び出して ingress_route を更新する
+	if err != nil {                                                                                                                                   // エラーが発生した場合
+		if errors.Is(err, service.ErrForbidden) { // 所有者でない場合は 403 を返す
+			return echoCtx.JSON(http.StatusForbidden, map[string]string{
+				"error": "アクセスが禁止されています",
+			})
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) { // レコードが存在しない場合は 404 を返す
+			return echoCtx.JSON(http.StatusNotFound, map[string]string{
+				"error": "リソースが見つかりません",
+			})
+		}
+		return echoCtx.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "内部サーバーエラー",
+		})
+	}
+	return echoCtx.JSON(http.StatusOK, ingressRouteData) // 更新後の ingress_route を返す
+}
+
 // ApplyDeployment は POST /deployments/:id/apply のハンドラー
 func (deploymentHandler *DeploymentHandler) ApplyDeployment(echoCtx echo.Context) error {
 	userID := echoCtx.Get("UserID").(string) // ミドルウェアがセットした UserID を取得する
