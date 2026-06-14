@@ -365,6 +365,18 @@ func (mock *applyHistoryMockDeploymentRepository) Updates(ctx context.Context, t
 	return nil
 }
 
+func (mock *applyHistoryMockDeploymentRepository) UpdateAppStatus(ctx context.Context, deploymentID string, appStatus models.AppStatus) error {
+	return nil // テストでは使用しないためデフォルト nil を返す
+}
+
+func (mock *applyHistoryMockDeploymentRepository) UpdateK8sStatus(ctx context.Context, deploymentID string, k8sStatus datatypes.JSON) error {
+	return nil // テストでは使用しないためデフォルト nil を返す
+}
+
+func (mock *applyHistoryMockDeploymentRepository) Delete(ctx context.Context, deploymentID string) error {
+	return nil // テストでは使用しないためデフォルト nil を返す
+}
+
 // applyHistoryMockProjectRepository は Apply テスト専用の ProjectRepository モック
 type applyHistoryMockProjectRepository struct {
 	projectData *models.Project // 返す project データ
@@ -394,7 +406,15 @@ func (mock *applyHistoryMockProjectRepository) Save(ctx context.Context, project
 	return nil // 使用しない
 }
 
+func (mock *applyHistoryMockProjectRepository) FindByNamespace(ctx context.Context, namespace string) (*models.Project, error) {
+	return nil, nil // 使用しない
+}
+
 func (mock *applyHistoryMockProjectRepository) Delete(ctx context.Context, tx *gorm.DB, project *models.Project) error {
+	return nil // 使用しない
+}
+
+func (mock *applyHistoryMockProjectRepository) DeleteNoTx(ctx context.Context, project *models.Project) error {
 	return nil // 使用しない
 }
 

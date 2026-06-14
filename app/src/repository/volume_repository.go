@@ -4,15 +4,17 @@ import (
 	"app/models"
 	"context"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
 // VolumeRepository は volumes テーブルへのアクセスを定義するインターフェース
 type VolumeRepository interface {
-	Create(ctx context.Context, tx *gorm.DB, volume *models.Volume) error                         // volume を作成する
-	FindByID(ctx context.Context, volumeID string) (*models.Volume, error)                        // volume を ID で取得する
-	FindAllByProjectID(ctx context.Context, projectID string) ([]*models.Volume, error)           // projectID に紐づく volume 一覧を取得する
-	Delete(ctx context.Context, tx *gorm.DB, volume *models.Volume) error                         // volume を削除する
+	Create(ctx context.Context, tx *gorm.DB, volume *models.Volume) error                                              // volume を作成する
+	FindByID(ctx context.Context, volumeID string) (*models.Volume, error)                                             // volume を ID で取得する
+	FindAllByProjectID(ctx context.Context, projectID string) ([]*models.Volume, error)                                // projectID に紐づく volume 一覧を取得する
+	Delete(ctx context.Context, tx *gorm.DB, volume *models.Volume) error                                              // volume を削除する
+	UpdateStatus(ctx context.Context, volumeID string, status models.VolumeStatus, k8sStatus datatypes.JSON) error     // volume の status と k8s_status を更新する
 }
 
 // volumeRepositoryImpl は VolumeRepository の GORM 実装
@@ -51,4 +53,19 @@ func (repo *volumeRepositoryImpl) FindAllByProjectID(ctx context.Context, projec
 // Delete は volume レコードを削除する
 func (repo *volumeRepositoryImpl) Delete(ctx context.Context, tx *gorm.DB, volume *models.Volume) error {
 	return tx.WithContext(ctx).Delete(volume).Error // tx を使って削除する
+}
+
+// UpdateStatus は volumeID に対応する volume の status と k8s_status を更新する
+func (repo *volumeRepositoryImpl) UpdateStatus(ctx context.Context, volumeID string, status models.VolumeStatus, k8sStatus datatypes.JSON) error {
+	result := repo.db.WithContext(ctx).Model(&models.Volume{}).Where("id = ?", volumeID).Updates(map[string]interface{}{ // status と k8s_status を更新する
+		"status":     status,
+		"k8s_status": k8sStatus,
+	})
+	if result.Error != nil { // エラーが発生した場合
+		return result.Error // エラーを返す
+	}
+	if result.RowsAffected == 0 { // 更新対象が存在しない場合
+		return gorm.ErrRecordNotFound // レコードなしエラーを返す
+	}
+	return nil // 正常終了
 }

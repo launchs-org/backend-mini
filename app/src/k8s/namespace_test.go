@@ -1,11 +1,16 @@
 package k8s
 
 import (
+	"app/models"
 	"context"
+	"errors"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
+	"gorm.io/gorm"
 )
 
 // TestToNamespaceName_変換が正しく行われる は ToNamespaceName の変換結果を確認する
@@ -86,5 +91,133 @@ func TestCreateNamespace_同名namespaceを2回作成するとエラーになる
 	err = CreateNamespace(ctx, fakeClient, "duplicate-namespace") // 2回目の同名作成
 	if err == nil {
 		t.Fatal("同名 namespace の2回目作成はエラーを返すべきです") // エラーが返らない場合はテスト失敗とする
+	}
+}
+
+// mockProjectRepositoryForNamespace は WatchNamespaces テスト用の ProjectRepository モック
+type mockProjectRepositoryForNamespace struct {
+	findByNamespaceFunc func(ctx context.Context, namespace string) (*models.Project, error) // FindByNamespace のモック関数
+	deleteNoTxFunc      func(ctx context.Context, project *models.Project) error             // DeleteNoTx のモック関数
+	deleteNoTxCalled    bool                                                                  // DeleteNoTx が呼ばれたかどうかを記録する
+}
+
+func (mock *mockProjectRepositoryForNamespace) Create(ctx context.Context, tx *gorm.DB, project *models.Project) error {
+	return nil // 使用しない
+}
+
+func (mock *mockProjectRepositoryForNamespace) FindByID(ctx context.Context, tx *gorm.DB, projectID string) (*models.Project, error) {
+	return nil, nil // 使用しない
+}
+
+func (mock *mockProjectRepositoryForNamespace) FindByIDNoTx(ctx context.Context, projectID string) (*models.Project, error) {
+	return nil, nil // 使用しない
+}
+
+func (mock *mockProjectRepositoryForNamespace) FindByNamespace(ctx context.Context, namespace string) (*models.Project, error) {
+	if mock.findByNamespaceFunc != nil { // モック関数が設定されている場合は呼び出す
+		return mock.findByNamespaceFunc(ctx, namespace)
+	}
+	return &models.Project{ID: "test-project-id", Namespace: namespace}, nil // デフォルトは対応する Project を返す
+}
+
+func (mock *mockProjectRepositoryForNamespace) FindAllByUserID(ctx context.Context, userID string) ([]*models.Project, error) {
+	return nil, nil // 使用しない
+}
+
+func (mock *mockProjectRepositoryForNamespace) UpdateStatus(ctx context.Context, tx *gorm.DB, project *models.Project, status models.ProjectStatus) error {
+	return nil // 使用しない
+}
+
+func (mock *mockProjectRepositoryForNamespace) Save(ctx context.Context, project *models.Project) error {
+	return nil // 使用しない
+}
+
+func (mock *mockProjectRepositoryForNamespace) Delete(ctx context.Context, tx *gorm.DB, project *models.Project) error {
+	return nil // 使用しない
+}
+
+func (mock *mockProjectRepositoryForNamespace) DeleteNoTx(ctx context.Context, project *models.Project) error {
+	mock.deleteNoTxCalled = true // 呼ばれたことを記録する
+	if mock.deleteNoTxFunc != nil { // モック関数が設定されている場合は呼び出す
+		return mock.deleteNoTxFunc(ctx, project)
+	}
+	return nil // デフォルトは正常終了する
+}
+
+// TestHandleNamespaceEvent_Deletedイベントで対応するProjectが削除される は Deleted イベントで DB の Project レコードが削除されることを確認する
+func TestHandleNamespaceEvent_Deletedイベントで対応するProjectが削除される(t *testing.T) {
+	projectRepo := &mockProjectRepositoryForNamespace{} // モック repository を生成する
+	ctx := context.Background()                         // テスト用コンテキストを生成する
+
+	namespaceObj := &corev1.Namespace{ // テスト用 Namespace オブジェクトを生成する
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-namespace",                       // Namespace 名を設定する
+			Labels: map[string]string{
+				"launchs.org/managed": "true",            // 管理ラベルを設定する
+			},
+		},
+	}
+
+	event := watch.Event{ // Deleted イベントを生成する
+		Type:   watch.Deleted,   // イベントタイプを Deleted に設定する
+		Object: namespaceObj,    // Namespace オブジェクトを設定する
+	}
+
+	handleNamespaceEvent(ctx, event, projectRepo) // イベントを処理する
+
+	if !projectRepo.deleteNoTxCalled { // DeleteNoTx が呼ばれていることを確認する
+		t.Fatal("Deleted イベントで DeleteNoTx が呼ばれていません")
+	}
+}
+
+// TestHandleNamespaceEvent_Deleted以外のイベントではProjectが削除されない は Added/Modified イベントで DB が変更されないことを確認する
+func TestHandleNamespaceEvent_Deleted以外のイベントではProjectが削除されない(t *testing.T) {
+	projectRepo := &mockProjectRepositoryForNamespace{} // モック repository を生成する
+	ctx := context.Background()                         // テスト用コンテキストを生成する
+
+	namespaceObj := &corev1.Namespace{ // テスト用 Namespace オブジェクトを生成する
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-namespace", // Namespace 名を設定する
+		},
+	}
+
+	for _, eventType := range []watch.EventType{watch.Added, watch.Modified} { // Added/Modified イベントをテストする
+		event := watch.Event{ // イベントを生成する
+			Type:   eventType,   // イベントタイプを設定する
+			Object: namespaceObj, // Namespace オブジェクトを設定する
+		}
+
+		handleNamespaceEvent(ctx, event, projectRepo) // イベントを処理する
+
+		if projectRepo.deleteNoTxCalled { // DeleteNoTx が呼ばれていないことを確認する
+			t.Fatalf("イベントタイプ %v で DeleteNoTx が誤って呼ばれました", eventType)
+		}
+	}
+}
+
+// TestHandleNamespaceEvent_FindByNamespaceがエラーを返す場合はDeleteが呼ばれない は Project 取得失敗時に削除が行われないことを確認する
+func TestHandleNamespaceEvent_FindByNamespaceがエラーを返す場合はDeleteが呼ばれない(t *testing.T) {
+	projectRepo := &mockProjectRepositoryForNamespace{ // モック repository を生成する
+		findByNamespaceFunc: func(ctx context.Context, namespace string) (*models.Project, error) {
+			return nil, errors.New("project not found") // エラーを返す
+		},
+	}
+	ctx := context.Background() // テスト用コンテキストを生成する
+
+	namespaceObj := &corev1.Namespace{ // テスト用 Namespace オブジェクトを生成する
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "unknown-namespace", // 存在しない Namespace 名を設定する
+		},
+	}
+
+	event := watch.Event{ // Deleted イベントを生成する
+		Type:   watch.Deleted,   // イベントタイプを Deleted に設定する
+		Object: namespaceObj,    // Namespace オブジェクトを設定する
+	}
+
+	handleNamespaceEvent(ctx, event, projectRepo) // イベントを処理する
+
+	if projectRepo.deleteNoTxCalled { // DeleteNoTx が呼ばれていないことを確認する
+		t.Fatal("FindByNamespace がエラーを返した場合に DeleteNoTx が呼ばれるべきではありません")
 	}
 }

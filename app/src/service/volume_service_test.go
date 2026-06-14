@@ -5,6 +5,7 @@ import (
 	"context"
 	"testing"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -14,6 +15,7 @@ type mockVolumeRepository struct {
 	findByIDFunc           func(ctx context.Context, volumeID string) (*models.Volume, error)
 	findAllByProjectIDFunc func(ctx context.Context, projectID string) ([]*models.Volume, error)
 	deleteFunc             func(ctx context.Context, tx *gorm.DB, volume *models.Volume) error
+	updateStatusFunc       func(ctx context.Context, volumeID string, status models.VolumeStatus, k8sStatus datatypes.JSON) error
 }
 
 func (mock *mockVolumeRepository) Create(ctx context.Context, tx *gorm.DB, volume *models.Volume) error {
@@ -37,6 +39,13 @@ func (mock *mockVolumeRepository) FindAllByProjectID(ctx context.Context, projec
 func (mock *mockVolumeRepository) Delete(ctx context.Context, tx *gorm.DB, volume *models.Volume) error {
 	if mock.deleteFunc != nil { // モック関数が設定されている場合は呼び出す
 		return mock.deleteFunc(ctx, tx, volume)
+	}
+	return nil // デフォルトは nil を返す
+}
+
+func (mock *mockVolumeRepository) UpdateStatus(ctx context.Context, volumeID string, status models.VolumeStatus, k8sStatus datatypes.JSON) error {
+	if mock.updateStatusFunc != nil { // モック関数が設定されている場合は呼び出す
+		return mock.updateStatusFunc(ctx, volumeID, status, k8sStatus)
 	}
 	return nil // デフォルトは nil を返す
 }

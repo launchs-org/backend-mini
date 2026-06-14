@@ -5,6 +5,7 @@ import (
 	"context"
 	"testing"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -82,6 +83,18 @@ func (mock *mockDeploymentRepositoryForMount) Save(ctx context.Context, deployme
 
 func (mock *mockDeploymentRepositoryForMount) Updates(ctx context.Context, tx *gorm.DB, deployment *models.Deployment, values map[string]interface{}) error {
 	return nil
+}
+
+func (mock *mockDeploymentRepositoryForMount) UpdateAppStatus(ctx context.Context, deploymentID string, appStatus models.AppStatus) error {
+	return nil // テストでは使用しないためデフォルト nil を返す
+}
+
+func (mock *mockDeploymentRepositoryForMount) UpdateK8sStatus(ctx context.Context, deploymentID string, k8sStatus datatypes.JSON) error {
+	return nil // テストでは使用しないためデフォルト nil を返す
+}
+
+func (mock *mockDeploymentRepositoryForMount) Delete(ctx context.Context, deploymentID string) error {
+	return nil // テストでは使用しないためデフォルト nil を返す
 }
 
 // TestListEnvVarMounts_正常に一覧が取得される は ListEnvVarMounts がマウント設定一覧を返すことを確認する

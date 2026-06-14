@@ -4,14 +4,17 @@ import (
 	"app/models"
 	"context"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
 // IngressRouteRepository は ingress_routes テーブルへのアクセスを定義するインターフェース
 type IngressRouteRepository interface {
-	Create(ctx context.Context, ingressRoute *models.IngressRoute) error                              // ingress_route を作成する
-	FindByDeploymentID(ctx context.Context, deploymentID string) (*models.IngressRoute, error)        // deploymentID に紐づく ingress_route を取得する
-	Update(ctx context.Context, ingressRoute *models.IngressRoute) error                              // ingress_route を更新する
+	Create(ctx context.Context, ingressRoute *models.IngressRoute) error                                                              // ingress_route を作成する
+	FindByID(ctx context.Context, ingressRouteID string) (*models.IngressRoute, error)                                                // ID に紐づく ingress_route を取得する
+	FindByDeploymentID(ctx context.Context, deploymentID string) (*models.IngressRoute, error)                                        // deploymentID に紐づく ingress_route を取得する
+	Update(ctx context.Context, ingressRoute *models.IngressRoute) error                                                              // ingress_route を更新する
+	UpdateStatus(ctx context.Context, ingressRouteID string, status models.IngressRouteStatus, k8sStatus datatypes.JSON) error        // ingress_route の status と k8s_status を更新する
 }
 
 // ingressRouteRepositoryImpl は IngressRouteRepository の GORM 実装
@@ -29,6 +32,15 @@ func (repo *ingressRouteRepositoryImpl) Create(ctx context.Context, ingressRoute
 	return repo.db.WithContext(ctx).Create(ingressRoute).Error // db を使って作成する
 }
 
+// FindByID は ingressRouteID に対応する ingress_route を返す
+func (repo *ingressRouteRepositoryImpl) FindByID(ctx context.Context, ingressRouteID string) (*models.IngressRoute, error) {
+	var ingressRouteData models.IngressRoute                                                                                      // ingress_route を格納する変数を定義する
+	if err := repo.db.WithContext(ctx).First(&ingressRouteData, "id = ?", ingressRouteID).Error; err != nil { // db から ingress_route を取得する
+		return nil, err // 取得エラーを返す
+	}
+	return &ingressRouteData, nil // ingress_route を返す
+}
+
 // FindByDeploymentID は deploymentID に対応する ingress_route を返す
 func (repo *ingressRouteRepositoryImpl) FindByDeploymentID(ctx context.Context, deploymentID string) (*models.IngressRoute, error) {
 	var ingressRouteData models.IngressRoute                                                                                              // ingress_route を格納する変数を定義する
@@ -41,4 +53,19 @@ func (repo *ingressRouteRepositoryImpl) FindByDeploymentID(ctx context.Context, 
 // Update は ingress_route レコードを保存する
 func (repo *ingressRouteRepositoryImpl) Update(ctx context.Context, ingressRoute *models.IngressRoute) error {
 	return repo.db.WithContext(ctx).Save(ingressRoute).Error // db を使って保存する
+}
+
+// UpdateStatus は ingressRouteID に対応する ingress_route の status と k8s_status を更新する
+func (repo *ingressRouteRepositoryImpl) UpdateStatus(ctx context.Context, ingressRouteID string, status models.IngressRouteStatus, k8sStatus datatypes.JSON) error {
+	result := repo.db.WithContext(ctx).Model(&models.IngressRoute{}).Where("id = ?", ingressRouteID).Updates(map[string]interface{}{ // status と k8s_status を更新する
+		"status":     status,
+		"k8s_status": k8sStatus,
+	})
+	if result.Error != nil { // エラーが発生した場合
+		return result.Error // エラーを返す
+	}
+	if result.RowsAffected == 0 { // 更新対象が存在しない場合
+		return gorm.ErrRecordNotFound // レコードなしエラーを返す
+	}
+	return nil // 正常終了
 }

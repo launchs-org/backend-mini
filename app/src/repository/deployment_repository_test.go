@@ -3,10 +3,12 @@ package repository
 import (
 	"app/models"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
 
+	"gorm.io/datatypes"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -343,5 +345,106 @@ func TestServiceRepository_Update_正常に更新される(t *testing.T) {
 	}
 	if fetched.PendingTargetPort != 3000 { // pending_target_port が変化していないことを確認する
 		t.Errorf("pending_target_port は変化しないはずですが変化しています: %d", fetched.PendingTargetPort)
+	}
+}
+
+// TestDeploymentRepository_UpdateAppStatus_正常に更新される は UpdateAppStatus で app_status が更新されることを確認する
+func TestDeploymentRepository_UpdateAppStatus_正常に更新される(t *testing.T) {
+	db := setupTestDB(t)                     // テスト用 DB を準備する
+	projectData := createTestProject(t, db) // テスト用 Project を作成する
+
+	deploymentData := &models.Deployment{ // テスト用 Deployment を作成する
+		ProjectID: projectData.ID,            // プロジェクト ID を設定する
+		Name:      "test-watcher-app",        // デプロイメント名を設定する
+		Type:      models.DeploymentTypeImageURL, // タイプを設定する
+		Status:    models.DeploymentStatusPending, // ステータスを設定する
+		AppStatus: models.AppStatusPending,   // 初期 app_status を設定する
+	}
+	db.Create(deploymentData)                                                // テスト用レコードを作成する
+	t.Cleanup(func() { db.Unscoped().Delete(deploymentData) }) // テスト終了後にレコードを削除する
+
+	repo := NewDeploymentRepository(db) // リポジトリを生成する
+
+	err := repo.UpdateAppStatus(context.Background(), deploymentData.ID, models.AppStatusRunning) // app_status を running に更新する
+	if err != nil {
+		t.Fatalf("UpdateAppStatus がエラーを返しました: %v", err)
+	}
+
+	var fetchedDeployment models.Deployment
+	db.First(&fetchedDeployment, "id = ?", deploymentData.ID) // 更新後のレコードを取得する
+	if fetchedDeployment.AppStatus != models.AppStatusRunning { // app_status が running に更新されていることを確認する
+		t.Errorf("期待する app_status: running, 実際の app_status: %s", fetchedDeployment.AppStatus)
+	}
+}
+
+// TestDeploymentRepository_UpdateAppStatus_存在しないIDはエラーを返す は存在しない ID でエラーが返ることを確認する
+func TestDeploymentRepository_UpdateAppStatus_存在しないIDはエラーを返す(t *testing.T) {
+	db := setupTestDB(t) // テスト用 DB を準備する
+
+	repo := NewDeploymentRepository(db) // リポジトリを生成する
+
+	err := repo.UpdateAppStatus(context.Background(), "00000000-0000-0000-0000-000000000000", models.AppStatusRunning) // 存在しない ID で更新する
+	if err == nil { // エラーが返ることを確認する
+		t.Fatal("存在しない deploymentID でエラーが返るべきですが nil が返りました")
+	}
+}
+
+// TestDeploymentRepository_UpdateK8sStatus_正常に更新される は UpdateK8sStatus で k8s_status が更新されることを確認する
+func TestDeploymentRepository_UpdateK8sStatus_正常に更新される(t *testing.T) {
+	db := setupTestDB(t)                     // テスト用 DB を準備する
+	projectData := createTestProject(t, db) // テスト用 Project を作成する
+
+	deploymentData := &models.Deployment{ // テスト用 Deployment を作成する
+		ProjectID: projectData.ID,               // プロジェクト ID を設定する
+		Name:      "test-k8s-status-app",        // デプロイメント名を設定する
+		Type:      models.DeploymentTypeImageURL, // タイプを設定する
+		Status:    models.DeploymentStatusPending, // ステータスを設定する
+		AppStatus: models.AppStatusPending,       // 初期 app_status を設定する
+	}
+	db.Create(deploymentData)                                                // テスト用レコードを作成する
+	t.Cleanup(func() { db.Unscoped().Delete(deploymentData) }) // テスト終了後にレコードを削除する
+
+	repo := NewDeploymentRepository(db) // リポジトリを生成する
+
+	k8sStatusJSON := datatypes.JSON([]byte(`{"replicas":1,"readyReplicas":1,"availableReplicas":1}`)) // テスト用 k8s_status JSON を生成する
+
+	err := repo.UpdateK8sStatus(context.Background(), deploymentData.ID, k8sStatusJSON) // k8s_status を更新する
+	if err != nil {
+		t.Fatalf("UpdateK8sStatus がエラーを返しました: %v", err)
+	}
+
+	var fetchedDeployment models.Deployment
+	db.First(&fetchedDeployment, "id = ?", deploymentData.ID) // 更新後のレコードを取得する
+	if fetchedDeployment.K8sStatus == nil {                   // k8s_status が nil でないことを確認する
+		t.Fatal("k8s_status が nil です")
+	}
+
+	// PostgreSQL は JSON を整形して返すため、デシリアライズして値を比較する
+	var fetchedMap map[string]interface{}
+	var expectedMap map[string]interface{}
+	if err := json.Unmarshal(fetchedDeployment.K8sStatus, &fetchedMap); err != nil { // 取得値をデシリアライズする
+		t.Fatalf("k8s_status のデシリアライズに失敗しました: %v", err)
+	}
+	if err := json.Unmarshal(k8sStatusJSON, &expectedMap); err != nil { // 期待値をデシリアライズする
+		t.Fatalf("期待値のデシリアライズに失敗しました: %v", err)
+	}
+	for expectedKey, expectedValue := range expectedMap { // 各フィールドを比較する
+		if fetchedMap[expectedKey] != expectedValue {
+			t.Errorf("k8s_status[%s]: 期待値 %v, 実際の値 %v", expectedKey, expectedValue, fetchedMap[expectedKey])
+		}
+	}
+}
+
+// TestDeploymentRepository_UpdateK8sStatus_存在しないIDはエラーを返す は存在しない ID でエラーが返ることを確認する
+func TestDeploymentRepository_UpdateK8sStatus_存在しないIDはエラーを返す(t *testing.T) {
+	db := setupTestDB(t) // テスト用 DB を準備する
+
+	repo := NewDeploymentRepository(db) // リポジトリを生成する
+
+	k8sStatusJSON := datatypes.JSON([]byte(`{"replicas":1}`)) // テスト用 k8s_status JSON を生成する
+
+	err := repo.UpdateK8sStatus(context.Background(), "00000000-0000-0000-0000-000000000000", k8sStatusJSON) // 存在しない ID で更新する
+	if err == nil { // エラーが返ることを確認する
+		t.Fatal("存在しない deploymentID でエラーが返るべきですが nil が返りました")
 	}
 }
