@@ -70,5 +70,10 @@ func New(opts RouterOptions) *echo.Echo {
 	apiGroup.POST("/projects/:id/volumes", opts.VolumeHandler.CreateVolume)  // volume 作成エンドポイント
 	apiGroup.DELETE("/volumes/:id", opts.VolumeHandler.DeleteVolume)         // volume 削除エンドポイント
 
+	// volume-mounts エンドポイントを登録する
+	apiGroup.GET("/deployments/:id/volume-mounts", opts.VolumeHandler.ListVolumeMounts)    // volume-mount 一覧取得エンドポイント
+	apiGroup.POST("/deployments/:id/volume-mounts", opts.VolumeHandler.CreateVolumeMount)  // volume-mount 作成エンドポイント
+	apiGroup.DELETE("/volume-mounts/:id", opts.VolumeHandler.DeleteVolumeMount)            // volume-mount 削除エンドポイント
+
 	return router
 }

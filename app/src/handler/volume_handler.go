@@ -109,3 +109,97 @@ func (volumeHandler *VolumeHandler) DeleteVolume(echoCtx echo.Context) error {
 	}
 	return echoCtx.NoContent(http.StatusNoContent) // 削除成功時は 204 を返す
 }
+
+// ListVolumeMounts は GET /api/v1/deployments/:id/volume-mounts のハンドラー
+func (volumeHandler *VolumeHandler) ListVolumeMounts(echoCtx echo.Context) error {
+	userID := echoCtx.Get("UserID").(string)  // ミドルウェアがセットした UserID を取得する
+	deploymentID := echoCtx.Param("id")       // パスパラメータから deployment ID を取得する
+
+	mountList, err := volumeHandler.volumeService.ListVolumeMounts(echoCtx.Request().Context(), userID, deploymentID) // サービスを呼び出してマウント一覧を取得する
+	if err != nil {
+		if errors.Is(err, service.ErrForbidden) { // 権限エラーの場合は 403 を返す
+			return echoCtx.JSON(http.StatusForbidden, map[string]string{
+				"error": "アクセスが拒否されました",
+			})
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) { // レコードが存在しない場合は 404 を返す
+			return echoCtx.JSON(http.StatusNotFound, map[string]string{
+				"error": "リソースが見つかりません",
+			})
+		}
+		return echoCtx.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "内部サーバーエラー",
+		})
+	}
+	return echoCtx.JSON(http.StatusOK, mountList) // マウント一覧を返す
+}
+
+// CreateVolumeMount は POST /api/v1/deployments/:id/volume-mounts のハンドラー
+func (volumeHandler *VolumeHandler) CreateVolumeMount(echoCtx echo.Context) error {
+	userID := echoCtx.Get("UserID").(string)  // ミドルウェアがセットした UserID を取得する
+	deploymentID := echoCtx.Param("id")       // パスパラメータから deployment ID を取得する
+
+	var requestBody service.CreateVolumeMountRequest              // リクエストボディの構造体を定義する
+	if err := echoCtx.Bind(&requestBody); err != nil {           // リクエストをバインドする
+		return echoCtx.JSON(http.StatusBadRequest, map[string]string{
+			"error": "リクエストが不正です",
+		})
+	}
+	if requestBody.VolumeID == "" { // 必須フィールドのバリデーションを行う
+		return echoCtx.JSON(http.StatusBadRequest, map[string]string{
+			"error": "volume_id は必須です",
+		})
+	}
+	if requestBody.MountPath == "" { // マウントパスのバリデーションを行う
+		return echoCtx.JSON(http.StatusBadRequest, map[string]string{
+			"error": "mount_path は必須です",
+		})
+	}
+
+	mountData, err := volumeHandler.volumeService.CreateVolumeMount(echoCtx.Request().Context(), userID, deploymentID, requestBody) // サービスを呼び出してマウント設定を作成する
+	if err != nil {
+		if errors.Is(err, service.ErrForbidden) { // 権限エラーの場合は 403 を返す
+			return echoCtx.JSON(http.StatusForbidden, map[string]string{
+				"error": "アクセスが拒否されました",
+			})
+		}
+		if errors.Is(err, service.ErrDuplicateVolumeMount) { // 重複エラーの場合は 409 を返す
+			return echoCtx.JSON(http.StatusConflict, map[string]string{
+				"error": "同一マウントパスが既に存在します",
+			})
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) { // レコードが存在しない場合は 404 を返す
+			return echoCtx.JSON(http.StatusNotFound, map[string]string{
+				"error": "リソースが見つかりません",
+			})
+		}
+		return echoCtx.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "内部サーバーエラー",
+		})
+	}
+	return echoCtx.JSON(http.StatusCreated, mountData) // 作成結果を返す
+}
+
+// DeleteVolumeMount は DELETE /api/v1/volume-mounts/:id のハンドラー
+func (volumeHandler *VolumeHandler) DeleteVolumeMount(echoCtx echo.Context) error {
+	userID := echoCtx.Get("UserID").(string) // ミドルウェアがセットした UserID を取得する
+	mountID := echoCtx.Param("id")           // パスパラメータからマウント ID を取得する
+
+	err := volumeHandler.volumeService.DeleteVolumeMount(echoCtx.Request().Context(), userID, mountID) // サービスを呼び出してマウント設定を削除する
+	if err != nil {
+		if errors.Is(err, service.ErrForbidden) { // 権限エラーの場合は 403 を返す
+			return echoCtx.JSON(http.StatusForbidden, map[string]string{
+				"error": "アクセスが拒否されました",
+			})
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) { // レコードが存在しない場合は 404 を返す
+			return echoCtx.JSON(http.StatusNotFound, map[string]string{
+				"error": "リソースが見つかりません",
+			})
+		}
+		return echoCtx.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "内部サーバーエラー",
+		})
+	}
+	return echoCtx.NoContent(http.StatusNoContent) // 削除成功時は 204 を返す
+}

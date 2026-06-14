@@ -85,9 +85,10 @@ func main() {
 	envVarHandler := handler.NewEnvVarHandler(envVarServiceImpl, envVarMountServiceImpl)                                                       // env_var ハンドラーを生成する
 
 	// volume ハンドラーを DI 組み立てする
-	volumeRepo := repository.NewVolumeRepository(repository.Database)                            // volume リポジトリを生成する
-	volumeServiceImpl := service.NewVolumeService(repository.Database, volumeRepo, projectRepo)  // volume サービスを生成する
-	volumeHandler := handler.NewVolumeHandler(volumeServiceImpl)                                 // volume ハンドラーを生成する
+	volumeRepo := repository.NewVolumeRepository(repository.Database)                                                              // volume リポジトリを生成する
+	volumeMountRepo := repository.NewVolumeMountRepository(repository.Database)                                                   // volume_mount リポジトリを生成する
+	volumeServiceImpl := service.NewVolumeService(repository.Database, volumeRepo, volumeMountRepo, deploymentRepo, projectRepo)  // volume サービスを生成する
+	volumeHandler := handler.NewVolumeHandler(volumeServiceImpl)                                                                  // volume ハンドラーを生成する
 
 	// ルーターを生成してサーバーを起動する
 	echoRouter := router.New(router.RouterOptions{
