@@ -16,6 +16,9 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
+// ErrDuplicateEnvKey は apply 時に環境変数キーが重複している場合のエラー
+var ErrDuplicateEnvKey = errors.New("duplicate env key: same key exists in env_var_mounts")
+
 // ErrAlreadyApplying は apply 中の deployment に再 apply しようとした場合のエラー
 var ErrAlreadyApplying = errors.New("already applying")
 
@@ -35,6 +38,8 @@ type ApplyService struct {
 	ProjectRepository  repository.ProjectRepository        // project リポジトリ
 	ServiceRepo        repository.ServiceRepository        // service リポジトリ
 	IngressRouteRepo   repository.IngressRouteRepository   // ingress_route リポジトリ
+	EnvVarRepo         repository.EnvVarRepository         // env_var リポジトリ
+	EnvVarMountRepo    repository.EnvVarMountRepository    // env_var_mount リポジトリ
 }
 
 // ApplyResult は Apply 処理の結果を表す構造体
@@ -54,6 +59,8 @@ func NewApplyService(
 	projectRepository repository.ProjectRepository,
 	serviceRepo repository.ServiceRepository,
 	ingressRouteRepo repository.IngressRouteRepository,
+	envVarRepo repository.EnvVarRepository,
+	envVarMountRepo repository.EnvVarMountRepository,
 ) *ApplyService {
 	return &ApplyService{ // 依存を注入して返す
 		DB:                db,
@@ -64,6 +71,8 @@ func NewApplyService(
 		ProjectRepository: projectRepository,
 		ServiceRepo:       serviceRepo,
 		IngressRouteRepo:  ingressRouteRepo,
+		EnvVarRepo:        envVarRepo,
+		EnvVarMountRepo:   envVarMountRepo,
 	}
 }
 
@@ -137,11 +146,50 @@ func (applyService *ApplyService) Apply(ctx context.Context, userID string, depl
 		deploymentForManifest.Command = command           // 実効 command を設定する
 		deploymentForManifest.Args = args                 // 実効 args を設定する
 
-		// 5. k8s Deployment マニフェストを生成する
+		// 5. EnvVarMount 一覧を取得して ConfigMap/Secret データを構築する
+		envVarMountList, err := applyService.EnvVarMountRepo.FindAllByDeploymentID(ctx, deploymentID) // deployment に紐づくマウント設定一覧を取得する
+		if err != nil {
+			return fmt.Errorf("env_var_mount list: %w", err) // 取得エラーを返す
+		}
+
+		configMapData := map[string]string{}  // ConfigMap 用の非シークレット環境変数を格納するマップ
+		secretData := map[string][]byte{}     // Secret 用のシークレット環境変数を格納するマップ
+		keySet := map[string]bool{}           // キー名重複チェック用のセット
+		var duplicateKeyErr error             // 重複キーエラーを一時保存する変数
+
+		for _, mountItem := range envVarMountList { // マウント設定ごとに環境変数を解決する
+			envVarData, envVarErr := applyService.EnvVarRepo.FindByID(ctx, mountItem.EnvVarID) // env_var を取得する
+			if envVarErr != nil {
+				return fmt.Errorf("env_var not found (id=%s): %w", mountItem.EnvVarID, envVarErr) // 取得エラーを返す
+			}
+
+			effectiveKey := envVarData.Key   // 実効キー名を決定する（デフォルトは元のキー）
+			if mountItem.OverrideKey != "" { // override_key が設定されている場合はそちらを使う
+				effectiveKey = mountItem.OverrideKey
+			}
+
+			if keySet[effectiveKey] { // キー名が重複している場合は後で failed にするためエラーを保存する
+				duplicateKeyErr = fmt.Errorf("%w: key=%s", ErrDuplicateEnvKey, effectiveKey) // 重複エラーを保存する
+				break                                                                         // ループを抜ける
+			}
+			keySet[effectiveKey] = true // キーをセットに追加する
+
+			if envVarData.IsSecret { // is_secret が true の場合は Secret に分類する
+				secretData[effectiveKey] = []byte(envVarData.Value) // Secret データに追加する
+			} else {
+				configMapData[effectiveKey] = envVarData.Value // ConfigMap データに追加する
+			}
+		}
+
+		// 5-2. k8s Deployment マニフェストを生成する
+		envVarMountValues := make([]models.EnvVarMount, len(envVarMountList)) // ポインタスライスを値スライスに変換する
+		for mountIndex, mountPtr := range envVarMountList {                   // マウント設定を値スライスに変換する
+			envVarMountValues[mountIndex] = *mountPtr
+		}
 		manifestGenerator := &manifest.Generator{ // マニフェストジェネレーターを生成する
 			InstanceSizes: map[string]models.InstanceSize{instanceSize: instanceSizeData},
 		}
-		deploymentManifest := manifestGenerator.GenerateDeployment(deploymentForManifest, projectData.Namespace, imageURL, nil, nil) // マニフェストを生成する
+		deploymentManifest := manifestGenerator.GenerateDeployment(deploymentForManifest, projectData.Namespace, imageURL, envVarMountValues, nil) // マニフェストを生成する
 
 		// 6. apply_history を INSERT する
 		manifestJSON, _ := json.Marshal(deploymentManifest) // マニフェストを JSON にシリアライズする
@@ -153,6 +201,40 @@ func (applyService *ApplyService) Apply(ctx context.Context, userID string, depl
 		}
 		if err := applyService.ApplyHistoryRepo.Create(ctx, tx, applyHistoryRecord); err != nil { // apply_history を作成する
 			return fmt.Errorf("apply_history create: %w", err) // 作成エラーを返す
+		}
+
+		// 6-2. 重複キーが存在した場合は apply_history を failed にしてエラーを返す
+		if duplicateKeyErr != nil { // 重複キーエラーが保存されている場合は処理する
+			applyHistoryRecord.Status = models.ApplyStatusFailed                                                                                  // ステータスを failed に変更する
+			applyHistoryRecord.ErrorMessage = duplicateKeyErr.Error()                                                                             // エラーメッセージを記録する
+			if updateErr := applyService.ApplyHistoryRepo.UpdateStatus(ctx, tx, applyHistoryRecord, models.ApplyStatusFailed); updateErr != nil { // ステータスを更新する
+				return fmt.Errorf("apply_history update: %w", updateErr) // 更新エラーを返す
+			}
+			return duplicateKeyErr // 重複キーエラーを返す
+		}
+
+		// 7-0. k8s に ConfigMap を apply する（非シークレット環境変数が存在する場合のみ）
+		if len(configMapData) > 0 { // ConfigMap データが存在する場合のみ apply する
+			if err := k8s.ApplyConfigMap(ctx, applyService.K8s, projectData.Namespace, deploymentData.Name, configMapData); err != nil { // k8s に ConfigMap を apply する
+				applyHistoryRecord.Status = models.ApplyStatusFailed                                                                                  // ConfigMap apply 失敗時はステータスを failed に変更する
+				applyHistoryRecord.ErrorMessage = err.Error()                                                                                         // エラーメッセージを記録する
+				if updateErr := applyService.ApplyHistoryRepo.UpdateStatus(ctx, tx, applyHistoryRecord, models.ApplyStatusFailed); updateErr != nil { // ステータスを更新する
+					return fmt.Errorf("apply_history update: %w", updateErr) // 更新エラーを返す
+				}
+				return fmt.Errorf("k8s configmap apply: %w", err) // k8s ConfigMap apply エラーを返す
+			}
+		}
+
+		// 7-0-2. k8s に Secret を apply する（シークレット環境変数が存在する場合のみ）
+		if len(secretData) > 0 { // Secret データが存在する場合のみ apply する
+			if err := k8s.ApplySecret(ctx, applyService.K8s, projectData.Namespace, deploymentData.Name, secretData); err != nil { // k8s に Secret を apply する
+				applyHistoryRecord.Status = models.ApplyStatusFailed                                                                                  // Secret apply 失敗時はステータスを failed に変更する
+				applyHistoryRecord.ErrorMessage = err.Error()                                                                                         // エラーメッセージを記録する
+				if updateErr := applyService.ApplyHistoryRepo.UpdateStatus(ctx, tx, applyHistoryRecord, models.ApplyStatusFailed); updateErr != nil { // ステータスを更新する
+					return fmt.Errorf("apply_history update: %w", updateErr) // 更新エラーを返す
+				}
+				return fmt.Errorf("k8s secret apply: %w", err) // k8s Secret apply エラーを返す
+			}
 		}
 
 		// 7. k8s に Deployment を apply する
