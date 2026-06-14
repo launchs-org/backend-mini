@@ -40,6 +40,8 @@ type ApplyService struct {
 	IngressRouteRepo   repository.IngressRouteRepository   // ingress_route リポジトリ
 	EnvVarRepo         repository.EnvVarRepository         // env_var リポジトリ
 	EnvVarMountRepo    repository.EnvVarMountRepository    // env_var_mount リポジトリ
+	VolumeRepo         repository.VolumeRepository         // volume リポジトリ
+	VolumeMountRepo    repository.VolumeMountRepository    // volume_mount リポジトリ
 }
 
 // ApplyResult は Apply 処理の結果を表す構造体
@@ -61,6 +63,8 @@ func NewApplyService(
 	ingressRouteRepo repository.IngressRouteRepository,
 	envVarRepo repository.EnvVarRepository,
 	envVarMountRepo repository.EnvVarMountRepository,
+	volumeRepo repository.VolumeRepository,
+	volumeMountRepo repository.VolumeMountRepository,
 ) *ApplyService {
 	return &ApplyService{ // 依存を注入して返す
 		DB:                db,
@@ -73,6 +77,8 @@ func NewApplyService(
 		IngressRouteRepo:  ingressRouteRepo,
 		EnvVarRepo:        envVarRepo,
 		EnvVarMountRepo:   envVarMountRepo,
+		VolumeRepo:        volumeRepo,
+		VolumeMountRepo:   volumeMountRepo,
 	}
 }
 
@@ -181,7 +187,18 @@ func (applyService *ApplyService) Apply(ctx context.Context, userID string, depl
 			}
 		}
 
-		// 5-2. k8s Deployment マニフェストを生成する
+		// 5-2. VolumeMount 一覧を取得して PVC マニフェストを準備する
+		volumeMountList, volumeMountErr := applyService.VolumeMountRepo.FindAllByDeploymentID(ctx, deploymentID) // deployment に紐づく VolumeMount 一覧を取得する
+		if volumeMountErr != nil {
+			return fmt.Errorf("volume_mount list: %w", volumeMountErr) // 取得エラーを返す
+		}
+
+		volumeMountValues := make([]models.VolumeMount, len(volumeMountList)) // ポインタスライスを値スライスに変換する
+		for mountIndex, mountPtr := range volumeMountList {                   // VolumeMount を値スライスに変換する
+			volumeMountValues[mountIndex] = *mountPtr
+		}
+
+		// 5-3. k8s Deployment マニフェストを生成する
 		envVarMountValues := make([]models.EnvVarMount, len(envVarMountList)) // ポインタスライスを値スライスに変換する
 		for mountIndex, mountPtr := range envVarMountList {                   // マウント設定を値スライスに変換する
 			envVarMountValues[mountIndex] = *mountPtr
@@ -189,7 +206,7 @@ func (applyService *ApplyService) Apply(ctx context.Context, userID string, depl
 		manifestGenerator := &manifest.Generator{ // マニフェストジェネレーターを生成する
 			InstanceSizes: map[string]models.InstanceSize{instanceSize: instanceSizeData},
 		}
-		deploymentManifest := manifestGenerator.GenerateDeployment(deploymentForManifest, projectData.Namespace, imageURL, envVarMountValues, nil) // マニフェストを生成する
+		deploymentManifest := manifestGenerator.GenerateDeployment(deploymentForManifest, projectData.Namespace, imageURL, envVarMountValues, volumeMountValues) // マニフェストを生成する
 
 		// 6. apply_history を INSERT する
 		manifestJSON, _ := json.Marshal(deploymentManifest) // マニフェストを JSON にシリアライズする
@@ -211,6 +228,29 @@ func (applyService *ApplyService) Apply(ctx context.Context, userID string, depl
 				return fmt.Errorf("apply_history update: %w", updateErr) // 更新エラーを返す
 			}
 			return duplicateKeyErr // 重複キーエラーを返す
+		}
+
+		// 6-3. k8s に PVC を apply する（VolumeMount が存在する場合のみ）
+		for _, volumeMountItem := range volumeMountList { // VolumeMount ごとに PVC を apply する
+			volumeData, volumeErr := applyService.VolumeRepo.FindByID(ctx, volumeMountItem.VolumeID) // Volume を取得する
+			if volumeErr != nil {
+				applyHistoryRecord.Status = models.ApplyStatusFailed                                                                                  // Volume 取得失敗時はステータスを failed に変更する
+				applyHistoryRecord.ErrorMessage = volumeErr.Error()                                                                                   // エラーメッセージを記録する
+				if updateErr := applyService.ApplyHistoryRepo.UpdateStatus(ctx, tx, applyHistoryRecord, models.ApplyStatusFailed); updateErr != nil { // ステータスを更新する
+					return fmt.Errorf("apply_history update: %w", updateErr) // 更新エラーを返す
+				}
+				return fmt.Errorf("volume not found (id=%s): %w", volumeMountItem.VolumeID, volumeErr) // Volume 取得エラーを返す
+			}
+			pvcName := volumeData.ID + "-pvc"                                                                                              // PVC 名を VolumeID から生成する（generator.go の命名規則と一致させる）
+			pvcManifest := k8s.BuildPVCManifest(projectData.Namespace, pvcName, volumeData.SizeMB, "")                                    // PVC マニフェストを生成する
+			if pvcErr := k8s.ApplyPVC(ctx, applyService.K8s, pvcManifest); pvcErr != nil {                                                // k8s に PVC を apply する
+				applyHistoryRecord.Status = models.ApplyStatusFailed                                                                                  // PVC apply 失敗時はステータスを failed に変更する
+				applyHistoryRecord.ErrorMessage = pvcErr.Error()                                                                                      // エラーメッセージを記録する
+				if updateErr := applyService.ApplyHistoryRepo.UpdateStatus(ctx, tx, applyHistoryRecord, models.ApplyStatusFailed); updateErr != nil { // ステータスを更新する
+					return fmt.Errorf("apply_history update: %w", updateErr) // 更新エラーを返す
+				}
+				return fmt.Errorf("k8s pvc apply (volume_id=%s): %w", volumeData.ID, pvcErr) // k8s PVC apply エラーを返す
+			}
 		}
 
 		// 7-0. k8s に ConfigMap を apply する（非シークレット環境変数が存在する場合のみ）
@@ -344,6 +384,13 @@ func (applyService *ApplyService) Apply(ctx context.Context, userID string, depl
 			ingressRouteData.Status = models.IngressRouteStatusActive             // status を active に更新する
 			if err := applyService.IngressRouteRepo.Update(ctx, ingressRouteData); err != nil { // IngressRoute を更新する
 				return fmt.Errorf("ingress_route update: %w", err) // 更新エラーを返す
+			}
+		}
+
+		// 11. VolumeMount の status を mounted に更新する
+		for _, volumeMountItem := range volumeMountList { // VolumeMount ごとに status を更新する
+			if updateErr := applyService.VolumeMountRepo.UpdateStatus(ctx, tx, volumeMountItem, models.VolumeMountStatusMounted); updateErr != nil { // status を mounted に変更する
+				return fmt.Errorf("volume_mount update status: %w", updateErr) // 更新エラーを返す
 			}
 		}
 

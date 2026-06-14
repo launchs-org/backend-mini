@@ -14,6 +14,7 @@ type RouterOptions struct {
 	ProjectHandler     *handler.ProjectHandler     // project ハンドラー
 	DeploymentHandler  *handler.DeploymentHandler  // deployment ハンドラー
 	EnvVarHandler      *handler.EnvVarHandler      // env_var ハンドラー
+	VolumeHandler      *handler.VolumeHandler      // volume ハンドラー
 }
 
 // New はミドルウェアとルーティングを設定した Echo インスタンスを返す
@@ -63,6 +64,16 @@ func New(opts RouterOptions) *echo.Echo {
 	apiGroup.GET("/deployments/:id/env-var-mounts", opts.EnvVarHandler.ListEnvVarMounts)    // マウント設定一覧取得エンドポイント
 	apiGroup.POST("/deployments/:id/env-var-mounts", opts.EnvVarHandler.CreateEnvVarMount)  // マウント設定作成エンドポイント
 	apiGroup.DELETE("/env-var-mounts/:id", opts.EnvVarHandler.DeleteEnvVarMount)            // マウント設定削除エンドポイント
+
+	// volumes エンドポイントを登録する
+	apiGroup.GET("/projects/:id/volumes", opts.VolumeHandler.ListVolumes)    // volume 一覧取得エンドポイント
+	apiGroup.POST("/projects/:id/volumes", opts.VolumeHandler.CreateVolume)  // volume 作成エンドポイント
+	apiGroup.DELETE("/volumes/:id", opts.VolumeHandler.DeleteVolume)         // volume 削除エンドポイント
+
+	// volume-mounts エンドポイントを登録する
+	apiGroup.GET("/deployments/:id/volume-mounts", opts.VolumeHandler.ListVolumeMounts)    // volume-mount 一覧取得エンドポイント
+	apiGroup.POST("/deployments/:id/volume-mounts", opts.VolumeHandler.CreateVolumeMount)  // volume-mount 作成エンドポイント
+	apiGroup.DELETE("/volume-mounts/:id", opts.VolumeHandler.DeleteVolumeMount)            // volume-mount 削除エンドポイント
 
 	return router
 }

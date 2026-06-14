@@ -71,13 +71,47 @@ func (generator *Generator) GenerateDeployment(
 
 	replicas := deploymentData.Replicas // レプリカ数を取得する
 
+	var podVolumes []corev1.Volume                       // Pod に追加する Volume のリストを定義する
+	var containerVolumeMounts []corev1.VolumeMount       // コンテナに追加する VolumeMount のリストを定義する
+
+	for _, volumeMount := range volumeMounts { // VolumeMount ごとに設定を生成する
+		mountPath := volumeMount.PendingMountPath // pending_mount_path を優先して使う
+		if mountPath == "" {                      // pending が空の場合は current 値を使う
+			mountPath = volumeMount.MountPath
+		}
+		pvcName := volumeMount.VolumeID + "-pvc" // PVC 名を VolumeID から生成する（k8s ApplyPVC の命名規則に合わせる）
+		podVolumes = append(podVolumes, corev1.Volume{ // Pod の Volumes に PVC を追加する
+			Name: volumeMount.VolumeID, // Volume 名として VolumeID を使う
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: pvcName, // PVC 名を設定する
+				},
+			},
+		})
+		containerVolumeMounts = append(containerVolumeMounts, corev1.VolumeMount{ // コンテナの VolumeMounts に追加する
+			Name:      volumeMount.VolumeID, // Volume 名と対応させる
+			MountPath: mountPath,            // マウントパスを設定する
+		})
+	}
+
+	if len(containerVolumeMounts) > 0 { // VolumeMount が存在する場合のみコンテナに設定する
+		container.VolumeMounts = containerVolumeMounts
+	}
+
+	podSpec := corev1.PodSpec{
+		Containers: []corev1.Container{container}, // コンテナを設定する
+	}
+	if len(podVolumes) > 0 { // Volume が存在する場合のみ Pod に設定する
+		podSpec.Volumes = podVolumes
+	}
+
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      deploymentData.Name, // Deployment 名を設定する
 			Namespace: namespace,           // namespace を設定する
 			Labels: map[string]string{
-				"launchs.org/deployment-id": deploymentData.ID,   // デプロイメント ID ラベルを設定する
-				"app":                       deploymentData.Name,  // アプリ名ラベルを設定する
+				"launchs.org/deployment-id": deploymentData.ID,  // デプロイメント ID ラベルを設定する
+				"app":                       deploymentData.Name, // アプリ名ラベルを設定する
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -89,9 +123,7 @@ func (generator *Generator) GenerateDeployment(
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{"app": deploymentData.Name}, // Pod ラベルを設定する
 				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{container}, // コンテナを設定する
-				},
+				Spec: podSpec, // Pod スペックを設定する
 			},
 		},
 	}
