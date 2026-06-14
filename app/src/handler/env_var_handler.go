@@ -12,13 +12,15 @@ import (
 
 // EnvVarHandler は環境変数 CRUD の HTTP ハンドラーを提供する
 type EnvVarHandler struct {
-	envVarService service.EnvVarService // env_var サービスのインターフェース
+	envVarService      service.EnvVarService      // env_var サービスのインターフェース
+	envVarMountService service.EnvVarMountService // env_var_mount サービスのインターフェース
 }
 
 // NewEnvVarHandler は EnvVarHandler を生成して返す
-func NewEnvVarHandler(envVarService service.EnvVarService) *EnvVarHandler {
+func NewEnvVarHandler(envVarService service.EnvVarService, envVarMountService service.EnvVarMountService) *EnvVarHandler {
 	return &EnvVarHandler{
-		envVarService: envVarService, // 依存を注入する
+		envVarService:      envVarService,      // env_var サービスを注入する
+		envVarMountService: envVarMountService, // env_var_mount サービスを注入する
 	}
 }
 
@@ -159,6 +161,95 @@ func (envVarHandler *EnvVarHandler) DeleteEnvVar(echoCtx echo.Context) error {
 	envVarID := echoCtx.Param("id")                                   // パスパラメータから env_var ID を取得する
 
 	err := envVarHandler.envVarService.DeleteEnvVar(echoCtx.Request().Context(), userClaim.UserID, envVarID) // サービスを呼び出して env_var を削除する
+	if err != nil {
+		if errors.Is(err, service.ErrForbidden) { // 権限エラーの場合は 403 を返す
+			return echoCtx.JSON(http.StatusForbidden, map[string]string{
+				"error": "アクセスが拒否されました",
+			})
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) { // レコードが存在しない場合は 404 を返す
+			return echoCtx.JSON(http.StatusNotFound, map[string]string{
+				"error": "リソースが見つかりません",
+			})
+		}
+		return echoCtx.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "内部サーバーエラー",
+		})
+	}
+	return echoCtx.NoContent(http.StatusNoContent) // 削除成功時は 204 を返す
+}
+
+// ListEnvVarMounts は GET /api/v1/deployments/:id/env-var-mounts のハンドラー
+func (envVarHandler *EnvVarHandler) ListEnvVarMounts(echoCtx echo.Context) error {
+	userClaim := echoCtx.Get("claim").(*middlewares.AccessTokenClaim) // JWT クレームを取得する
+	deploymentID := echoCtx.Param("id")                               // パスパラメータから deployment ID を取得する
+
+	mountList, err := envVarHandler.envVarMountService.ListEnvVarMounts(echoCtx.Request().Context(), userClaim.UserID, deploymentID) // サービスを呼び出して一覧を取得する
+	if err != nil {
+		if errors.Is(err, service.ErrForbidden) { // 権限エラーの場合は 403 を返す
+			return echoCtx.JSON(http.StatusForbidden, map[string]string{
+				"error": "アクセスが拒否されました",
+			})
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) { // レコードが存在しない場合は 404 を返す
+			return echoCtx.JSON(http.StatusNotFound, map[string]string{
+				"error": "リソースが見つかりません",
+			})
+		}
+		return echoCtx.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "内部サーバーエラー",
+		})
+	}
+	return echoCtx.JSON(http.StatusOK, mountList) // マウント設定一覧を返す
+}
+
+// CreateEnvVarMount は POST /api/v1/deployments/:id/env-var-mounts のハンドラー
+func (envVarHandler *EnvVarHandler) CreateEnvVarMount(echoCtx echo.Context) error {
+	userClaim := echoCtx.Get("claim").(*middlewares.AccessTokenClaim) // JWT クレームを取得する
+	deploymentID := echoCtx.Param("id")                               // パスパラメータから deployment ID を取得する
+
+	var requestBody service.CreateEnvVarMountRequest          // リクエストボディの構造体を定義する
+	if err := echoCtx.Bind(&requestBody); err != nil {        // リクエストをバインドする
+		return echoCtx.JSON(http.StatusBadRequest, map[string]string{
+			"error": "リクエストが不正です",
+		})
+	}
+	if requestBody.EnvVarID == "" { // 必須フィールドのバリデーションを行う
+		return echoCtx.JSON(http.StatusBadRequest, map[string]string{
+			"error": "env_var_id は必須です",
+		})
+	}
+
+	mountData, err := envVarHandler.envVarMountService.CreateEnvVarMount(echoCtx.Request().Context(), userClaim.UserID, deploymentID, requestBody) // サービスを呼び出してマウント設定を作成する
+	if err != nil {
+		if errors.Is(err, service.ErrForbidden) { // 権限エラーの場合は 403 を返す
+			return echoCtx.JSON(http.StatusForbidden, map[string]string{
+				"error": "アクセスが拒否されました",
+			})
+		}
+		if errors.Is(err, service.ErrDuplicateMount) { // 重複マウントの場合は 409 を返す
+			return echoCtx.JSON(http.StatusConflict, map[string]string{
+				"error": "この環境変数は既にマウントされています",
+			})
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) { // レコードが存在しない場合は 404 を返す
+			return echoCtx.JSON(http.StatusNotFound, map[string]string{
+				"error": "リソースが見つかりません",
+			})
+		}
+		return echoCtx.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "内部サーバーエラー",
+		})
+	}
+	return echoCtx.JSON(http.StatusCreated, mountData) // 作成結果を返す
+}
+
+// DeleteEnvVarMount は DELETE /api/v1/env-var-mounts/:id のハンドラー
+func (envVarHandler *EnvVarHandler) DeleteEnvVarMount(echoCtx echo.Context) error {
+	userClaim := echoCtx.Get("claim").(*middlewares.AccessTokenClaim) // JWT クレームを取得する
+	mountID := echoCtx.Param("id")                                    // パスパラメータからマウント ID を取得する
+
+	err := envVarHandler.envVarMountService.DeleteEnvVarMount(echoCtx.Request().Context(), userClaim.UserID, mountID) // サービスを呼び出してマウント設定を削除する
 	if err != nil {
 		if errors.Is(err, service.ErrForbidden) { // 権限エラーの場合は 403 を返す
 			return echoCtx.JSON(http.StatusForbidden, map[string]string{

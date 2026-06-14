@@ -59,5 +59,10 @@ func New(opts RouterOptions) *echo.Echo {
 	apiGroup.PUT("/env-vars/:id", opts.EnvVarHandler.UpdateEnvVar)            // env_var 更新エンドポイント
 	apiGroup.DELETE("/env-vars/:id", opts.EnvVarHandler.DeleteEnvVar)         // env_var 削除エンドポイント
 
+	// env-var-mounts エンドポイントを登録する
+	apiGroup.GET("/deployments/:id/env-var-mounts", opts.EnvVarHandler.ListEnvVarMounts)    // マウント設定一覧取得エンドポイント
+	apiGroup.POST("/deployments/:id/env-var-mounts", opts.EnvVarHandler.CreateEnvVarMount)  // マウント設定作成エンドポイント
+	apiGroup.DELETE("/env-var-mounts/:id", opts.EnvVarHandler.DeleteEnvVarMount)            // マウント設定削除エンドポイント
+
 	return router
 }

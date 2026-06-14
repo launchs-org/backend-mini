@@ -74,7 +74,7 @@ func TestListEnvVars_正常に一覧が取得される(t *testing.T) {
 		},
 	}
 
-	envVarHandler := NewEnvVarHandler(mockSvc) // ハンドラーを生成する
+	envVarHandler := NewEnvVarHandler(mockSvc, nil) // ハンドラーを生成する
 	echoCtx, responseRecorder := setupEnvVarEchoContext(http.MethodGet, "/api/v1/projects/project-id-1/env-vars", "", map[string]string{"id": "project-id-1"})
 
 	err := envVarHandler.ListEnvVars(echoCtx) // ハンドラーを実行する
@@ -110,7 +110,7 @@ func TestListEnvVars_他ユーザーのProjectは403が返る(t *testing.T) {
 		},
 	}
 
-	envVarHandler := NewEnvVarHandler(mockSvc) // ハンドラーを生成する
+	envVarHandler := NewEnvVarHandler(mockSvc, nil) // ハンドラーを生成する
 	echoCtx, responseRecorder := setupEnvVarEchoContext(http.MethodGet, "/api/v1/projects/other-project-id/env-vars", "", map[string]string{"id": "other-project-id"})
 
 	err := envVarHandler.ListEnvVars(echoCtx) // ハンドラーを実行する
@@ -138,7 +138,7 @@ func TestCreateEnvVar_正常にenv_varが作成される(t *testing.T) {
 		},
 	}
 
-	envVarHandler := NewEnvVarHandler(mockSvc)                                                                             // ハンドラーを生成する
+	envVarHandler := NewEnvVarHandler(mockSvc, nil)                                                                             // ハンドラーを生成する
 	requestJSON := `{"key":"MY_KEY","value":"my-value","is_secret":false}`                                                 // リクエスト JSON を定義する
 	echoCtx, responseRecorder := setupEnvVarEchoContext(http.MethodPost, "/api/v1/projects/project-id-1/env-vars", requestJSON, map[string]string{"id": "project-id-1"})
 
@@ -175,7 +175,7 @@ func TestCreateEnvVar_is_secret_trueの値はマスクされる(t *testing.T) {
 		},
 	}
 
-	envVarHandler := NewEnvVarHandler(mockSvc)                                                                                  // ハンドラーを生成する
+	envVarHandler := NewEnvVarHandler(mockSvc, nil)                                                                                  // ハンドラーを生成する
 	requestJSON := `{"key":"SECRET_KEY","value":"super-secret-value","is_secret":true}`                                         // リクエスト JSON を定義する
 	echoCtx, responseRecorder := setupEnvVarEchoContext(http.MethodPost, "/api/v1/projects/project-id-1/env-vars", requestJSON, map[string]string{"id": "project-id-1"})
 
@@ -201,7 +201,7 @@ func TestCreateEnvVar_他ユーザーのProjectは403が返る(t *testing.T) {
 		},
 	}
 
-	envVarHandler := NewEnvVarHandler(mockSvc)                                                                             // ハンドラーを生成する
+	envVarHandler := NewEnvVarHandler(mockSvc, nil)                                                                             // ハンドラーを生成する
 	requestJSON := `{"key":"KEY","value":"val","is_secret":false}`                                                         // リクエスト JSON を定義する
 	echoCtx, responseRecorder := setupEnvVarEchoContext(http.MethodPost, "/api/v1/projects/other-project/env-vars", requestJSON, map[string]string{"id": "other-project"})
 
@@ -231,7 +231,7 @@ func TestUpdateEnvVar_正常にenv_varが更新される(t *testing.T) {
 		},
 	}
 
-	envVarHandler := NewEnvVarHandler(mockSvc)                                                                         // ハンドラーを生成する
+	envVarHandler := NewEnvVarHandler(mockSvc, nil)                                                                         // ハンドラーを生成する
 	requestJSON := `{"key":"UPDATED_KEY","value":"updated-value"}`                                                     // リクエスト JSON を定義する
 	echoCtx, responseRecorder := setupEnvVarEchoContext(http.MethodPut, "/api/v1/env-vars/env-var-id-1", requestJSON, map[string]string{"id": "env-var-id-1"})
 
@@ -260,7 +260,7 @@ func TestUpdateEnvVar_他ユーザーのProjectの環境変数は403が返る(t 
 		},
 	}
 
-	envVarHandler := NewEnvVarHandler(mockSvc)                                                                         // ハンドラーを生成する
+	envVarHandler := NewEnvVarHandler(mockSvc, nil)                                                                         // ハンドラーを生成する
 	requestJSON := `{"key":"KEY"}`                                                                                     // リクエスト JSON を定義する
 	echoCtx, responseRecorder := setupEnvVarEchoContext(http.MethodPut, "/api/v1/env-vars/other-env-var-id", requestJSON, map[string]string{"id": "other-env-var-id"})
 
@@ -281,7 +281,7 @@ func TestDeleteEnvVar_正常にenv_varが削除される(t *testing.T) {
 		},
 	}
 
-	envVarHandler := NewEnvVarHandler(mockSvc) // ハンドラーを生成する
+	envVarHandler := NewEnvVarHandler(mockSvc, nil) // ハンドラーを生成する
 	echoCtx, responseRecorder := setupEnvVarEchoContext(http.MethodDelete, "/api/v1/env-vars/env-var-id-1", "", map[string]string{"id": "env-var-id-1"})
 
 	err := envVarHandler.DeleteEnvVar(echoCtx) // ハンドラーを実行する
@@ -301,7 +301,7 @@ func TestDeleteEnvVar_他ユーザーのProjectの環境変数は403が返る(t 
 		},
 	}
 
-	envVarHandler := NewEnvVarHandler(mockSvc) // ハンドラーを生成する
+	envVarHandler := NewEnvVarHandler(mockSvc, nil) // ハンドラーを生成する
 	echoCtx, responseRecorder := setupEnvVarEchoContext(http.MethodDelete, "/api/v1/env-vars/other-env-var-id", "", map[string]string{"id": "other-env-var-id"})
 
 	err := envVarHandler.DeleteEnvVar(echoCtx) // ハンドラーを実行する
@@ -321,7 +321,7 @@ func TestDeleteEnvVar_存在しない場合は404が返る(t *testing.T) {
 		},
 	}
 
-	envVarHandler := NewEnvVarHandler(mockSvc) // ハンドラーを生成する
+	envVarHandler := NewEnvVarHandler(mockSvc, nil) // ハンドラーを生成する
 	echoCtx, responseRecorder := setupEnvVarEchoContext(http.MethodDelete, "/api/v1/env-vars/nonexistent-id", "", map[string]string{"id": "nonexistent-id"})
 
 	err := envVarHandler.DeleteEnvVar(echoCtx) // ハンドラーを実行する
@@ -330,5 +330,169 @@ func TestDeleteEnvVar_存在しない場合は404が返る(t *testing.T) {
 	}
 	if responseRecorder.Code != http.StatusNotFound { // 404 が返ることを確認する
 		t.Errorf("期待するステータスコード: %d, 実際のステータスコード: %d", http.StatusNotFound, responseRecorder.Code)
+	}
+}
+
+// mockEnvVarMountService は EnvVarMountService のテスト用モック実装
+type mockEnvVarMountService struct {
+	listEnvVarMountsFunc  func(ctx context.Context, userID string, deploymentID string) ([]*models.EnvVarMount, error)
+	createEnvVarMountFunc func(ctx context.Context, userID string, deploymentID string, req service.CreateEnvVarMountRequest) (*models.EnvVarMount, error)
+	deleteEnvVarMountFunc func(ctx context.Context, userID string, mountID string) error
+}
+
+func (mock *mockEnvVarMountService) ListEnvVarMounts(ctx context.Context, userID string, deploymentID string) ([]*models.EnvVarMount, error) {
+	return mock.listEnvVarMountsFunc(ctx, userID, deploymentID) // モック関数を呼び出す
+}
+
+func (mock *mockEnvVarMountService) CreateEnvVarMount(ctx context.Context, userID string, deploymentID string, req service.CreateEnvVarMountRequest) (*models.EnvVarMount, error) {
+	return mock.createEnvVarMountFunc(ctx, userID, deploymentID, req) // モック関数を呼び出す
+}
+
+func (mock *mockEnvVarMountService) DeleteEnvVarMount(ctx context.Context, userID string, mountID string) error {
+	return mock.deleteEnvVarMountFunc(ctx, userID, mountID) // モック関数を呼び出す
+}
+
+// TestListEnvVarMounts_正常に一覧が取得される は GET でマウント設定一覧が返ることを確認する
+func TestListEnvVarMounts_正常に一覧が取得される(t *testing.T) {
+	mockMountSvc := &mockEnvVarMountService{
+		listEnvVarMountsFunc: func(ctx context.Context, userID string, deploymentID string) ([]*models.EnvVarMount, error) {
+			return []*models.EnvVarMount{
+				{ID: "mount-id-1", DeploymentID: "deployment-id-1", EnvVarID: "env-var-id-1"}, // マウント設定を返す
+			}, nil
+		},
+	}
+
+	envVarHandler := NewEnvVarHandler(nil, mockMountSvc) // ハンドラーを生成する
+	echoCtx, responseRecorder := setupEnvVarEchoContext(http.MethodGet, "/api/v1/deployments/deployment-id-1/env-var-mounts", "", map[string]string{"id": "deployment-id-1"})
+
+	err := envVarHandler.ListEnvVarMounts(echoCtx) // ハンドラーを実行する
+	if err != nil {
+		t.Fatalf("ハンドラーがエラーを返しました: %v", err)
+	}
+	if responseRecorder.Code != http.StatusOK { // 200 が返ることを確認する
+		t.Errorf("期待するステータスコード: %d, 実際のステータスコード: %d", http.StatusOK, responseRecorder.Code)
+	}
+}
+
+// TestListEnvVarMounts_他ユーザーのDeploymentは403が返る は他ユーザーの deployment へのアクセスで 403 が返ることを確認する
+func TestListEnvVarMounts_他ユーザーのDeploymentは403が返る(t *testing.T) {
+	mockMountSvc := &mockEnvVarMountService{
+		listEnvVarMountsFunc: func(ctx context.Context, userID string, deploymentID string) ([]*models.EnvVarMount, error) {
+			return nil, service.ErrForbidden // 権限エラーを返す
+		},
+	}
+
+	envVarHandler := NewEnvVarHandler(nil, mockMountSvc) // ハンドラーを生成する
+	echoCtx, responseRecorder := setupEnvVarEchoContext(http.MethodGet, "/api/v1/deployments/other-deployment-id/env-var-mounts", "", map[string]string{"id": "other-deployment-id"})
+
+	err := envVarHandler.ListEnvVarMounts(echoCtx) // ハンドラーを実行する
+	if err != nil {
+		t.Fatalf("ハンドラーがエラーを返しました: %v", err)
+	}
+	if responseRecorder.Code != http.StatusForbidden { // 403 が返ることを確認する
+		t.Errorf("期待するステータスコード: %d, 実際のステータスコード: %d", http.StatusForbidden, responseRecorder.Code)
+	}
+}
+
+// TestCreateEnvVarMount_正常にマウント設定が作成される は POST でマウント設定が作成されることを確認する
+func TestCreateEnvVarMount_正常にマウント設定が作成される(t *testing.T) {
+	mockMountSvc := &mockEnvVarMountService{
+		createEnvVarMountFunc: func(ctx context.Context, userID string, deploymentID string, req service.CreateEnvVarMountRequest) (*models.EnvVarMount, error) {
+			return &models.EnvVarMount{ID: "mount-id-1", DeploymentID: deploymentID, EnvVarID: req.EnvVarID}, nil // 作成したマウント設定を返す
+		},
+	}
+
+	envVarHandler := NewEnvVarHandler(nil, mockMountSvc)                                                                                                // ハンドラーを生成する
+	requestJSON := `{"env_var_id":"env-var-id-1","override_key":"MY_KEY"}`                                                                              // リクエスト JSON を定義する
+	echoCtx, responseRecorder := setupEnvVarEchoContext(http.MethodPost, "/api/v1/deployments/deployment-id-1/env-var-mounts", requestJSON, map[string]string{"id": "deployment-id-1"})
+
+	err := envVarHandler.CreateEnvVarMount(echoCtx) // ハンドラーを実行する
+	if err != nil {
+		t.Fatalf("ハンドラーがエラーを返しました: %v", err)
+	}
+	if responseRecorder.Code != http.StatusCreated { // 201 が返ることを確認する
+		t.Errorf("期待するステータスコード: %d, 実際のステータスコード: %d", http.StatusCreated, responseRecorder.Code)
+	}
+}
+
+// TestCreateEnvVarMount_重複マウントは409が返る は重複マウントで 409 が返ることを確認する
+func TestCreateEnvVarMount_重複マウントは409が返る(t *testing.T) {
+	mockMountSvc := &mockEnvVarMountService{
+		createEnvVarMountFunc: func(ctx context.Context, userID string, deploymentID string, req service.CreateEnvVarMountRequest) (*models.EnvVarMount, error) {
+			return nil, service.ErrDuplicateMount // 重複エラーを返す
+		},
+	}
+
+	envVarHandler := NewEnvVarHandler(nil, mockMountSvc)                                                                                                // ハンドラーを生成する
+	requestJSON := `{"env_var_id":"env-var-id-1"}`                                                                                                      // リクエスト JSON を定義する
+	echoCtx, responseRecorder := setupEnvVarEchoContext(http.MethodPost, "/api/v1/deployments/deployment-id-1/env-var-mounts", requestJSON, map[string]string{"id": "deployment-id-1"})
+
+	err := envVarHandler.CreateEnvVarMount(echoCtx) // ハンドラーを実行する
+	if err != nil {
+		t.Fatalf("ハンドラーがエラーを返しました: %v", err)
+	}
+	if responseRecorder.Code != http.StatusConflict { // 409 が返ることを確認する
+		t.Errorf("期待するステータスコード: %d, 実際のステータスコード: %d", http.StatusConflict, responseRecorder.Code)
+	}
+}
+
+// TestCreateEnvVarMount_他ユーザーのDeploymentは403が返る は他ユーザーの deployment へのマウントで 403 が返ることを確認する
+func TestCreateEnvVarMount_他ユーザーのDeploymentは403が返る(t *testing.T) {
+	mockMountSvc := &mockEnvVarMountService{
+		createEnvVarMountFunc: func(ctx context.Context, userID string, deploymentID string, req service.CreateEnvVarMountRequest) (*models.EnvVarMount, error) {
+			return nil, service.ErrForbidden // 権限エラーを返す
+		},
+	}
+
+	envVarHandler := NewEnvVarHandler(nil, mockMountSvc)                                                                                                // ハンドラーを生成する
+	requestJSON := `{"env_var_id":"env-var-id-1"}`                                                                                                      // リクエスト JSON を定義する
+	echoCtx, responseRecorder := setupEnvVarEchoContext(http.MethodPost, "/api/v1/deployments/other-deployment-id/env-var-mounts", requestJSON, map[string]string{"id": "other-deployment-id"})
+
+	err := envVarHandler.CreateEnvVarMount(echoCtx) // ハンドラーを実行する
+	if err != nil {
+		t.Fatalf("ハンドラーがエラーを返しました: %v", err)
+	}
+	if responseRecorder.Code != http.StatusForbidden { // 403 が返ることを確認する
+		t.Errorf("期待するステータスコード: %d, 実際のステータスコード: %d", http.StatusForbidden, responseRecorder.Code)
+	}
+}
+
+// TestDeleteEnvVarMount_正常にマウント設定が削除される は DELETE でマウント設定が削除されることを確認する
+func TestDeleteEnvVarMount_正常にマウント設定が削除される(t *testing.T) {
+	mockMountSvc := &mockEnvVarMountService{
+		deleteEnvVarMountFunc: func(ctx context.Context, userID string, mountID string) error {
+			return nil // 削除成功を返す
+		},
+	}
+
+	envVarHandler := NewEnvVarHandler(nil, mockMountSvc) // ハンドラーを生成する
+	echoCtx, responseRecorder := setupEnvVarEchoContext(http.MethodDelete, "/api/v1/env-var-mounts/mount-id-1", "", map[string]string{"id": "mount-id-1"})
+
+	err := envVarHandler.DeleteEnvVarMount(echoCtx) // ハンドラーを実行する
+	if err != nil {
+		t.Fatalf("ハンドラーがエラーを返しました: %v", err)
+	}
+	if responseRecorder.Code != http.StatusNoContent { // 204 が返ることを確認する
+		t.Errorf("期待するステータスコード: %d, 実際のステータスコード: %d", http.StatusNoContent, responseRecorder.Code)
+	}
+}
+
+// TestDeleteEnvVarMount_他ユーザーのDeploymentのマウントは403が返る は他ユーザーの deployment のマウント削除で 403 が返ることを確認する
+func TestDeleteEnvVarMount_他ユーザーのDeploymentのマウントは403が返る(t *testing.T) {
+	mockMountSvc := &mockEnvVarMountService{
+		deleteEnvVarMountFunc: func(ctx context.Context, userID string, mountID string) error {
+			return service.ErrForbidden // 権限エラーを返す
+		},
+	}
+
+	envVarHandler := NewEnvVarHandler(nil, mockMountSvc) // ハンドラーを生成する
+	echoCtx, responseRecorder := setupEnvVarEchoContext(http.MethodDelete, "/api/v1/env-var-mounts/other-mount-id", "", map[string]string{"id": "other-mount-id"})
+
+	err := envVarHandler.DeleteEnvVarMount(echoCtx) // ハンドラーを実行する
+	if err != nil {
+		t.Fatalf("ハンドラーがエラーを返しました: %v", err)
+	}
+	if responseRecorder.Code != http.StatusForbidden { // 403 が返ることを確認する
+		t.Errorf("期待するステータスコード: %d, 実際のステータスコード: %d", http.StatusForbidden, responseRecorder.Code)
 	}
 }

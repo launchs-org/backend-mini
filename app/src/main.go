@@ -78,9 +78,11 @@ func main() {
 	deploymentHandler := handler.NewDeploymentHandler(deploymentServiceImpl, applyServiceImpl)    // deployment ハンドラーを生成する
 
 	// env_var ハンドラーを DI 組み立てする
-	envVarRepo := repository.NewEnvVarRepository(repository.Database)                                        // env_var リポジトリを生成する
-	envVarServiceImpl := service.NewEnvVarService(repository.Database, envVarRepo, projectRepo)              // env_var サービスを生成する
-	envVarHandler := handler.NewEnvVarHandler(envVarServiceImpl)                                             // env_var ハンドラーを生成する
+	envVarRepo := repository.NewEnvVarRepository(repository.Database)                                                                          // env_var リポジトリを生成する
+	envVarServiceImpl := service.NewEnvVarService(repository.Database, envVarRepo, projectRepo)                                                // env_var サービスを生成する
+	envVarMountRepo := repository.NewEnvVarMountRepository(repository.Database)                                                                // env_var_mount リポジトリを生成する
+	envVarMountServiceImpl := service.NewEnvVarMountService(repository.Database, envVarMountRepo, deploymentRepo, projectRepo)                 // env_var_mount サービスを生成する
+	envVarHandler := handler.NewEnvVarHandler(envVarServiceImpl, envVarMountServiceImpl)                                                       // env_var ハンドラーを生成する
 
 	// ルーターを生成してサーバーを起動する
 	echoRouter := router.New(router.RouterOptions{
