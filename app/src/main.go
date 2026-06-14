@@ -77,11 +77,17 @@ func main() {
 	applyServiceImpl := service.NewApplyService(repository.Database, k8sClient, dynamicClient, deploymentRepo, applyHistoryRepo, projectRepo, serviceRepo, ingressRouteRepo) // apply サービスを生成する
 	deploymentHandler := handler.NewDeploymentHandler(deploymentServiceImpl, applyServiceImpl)    // deployment ハンドラーを生成する
 
+	// env_var ハンドラーを DI 組み立てする
+	envVarRepo := repository.NewEnvVarRepository(repository.Database)                                        // env_var リポジトリを生成する
+	envVarServiceImpl := service.NewEnvVarService(repository.Database, envVarRepo, projectRepo)              // env_var サービスを生成する
+	envVarHandler := handler.NewEnvVarHandler(envVarServiceImpl)                                             // env_var ハンドラーを生成する
+
 	// ルーターを生成してサーバーを起動する
 	echoRouter := router.New(router.RouterOptions{
 		UserQuotaHandler:  userQuotaHandler,  // quota ハンドラーを注入する
 		ProjectHandler:    projectHandler,    // project ハンドラーを注入する
 		DeploymentHandler: deploymentHandler, // deployment ハンドラーを注入する
+		EnvVarHandler:     envVarHandler,     // env_var ハンドラーを注入する
 	})
 	if err := echoRouter.Start(":" + cfg.GetServerPort()); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		slog.Error("サーバーの起動に失敗しました", "error", err) // サーバー起動失敗時にエラーログを出す

@@ -13,6 +13,7 @@ type RouterOptions struct {
 	UserQuotaHandler   *handler.UserQuotaHandler   // quota ハンドラー
 	ProjectHandler     *handler.ProjectHandler     // project ハンドラー
 	DeploymentHandler  *handler.DeploymentHandler  // deployment ハンドラー
+	EnvVarHandler      *handler.EnvVarHandler      // env_var ハンドラー
 }
 
 // New はミドルウェアとルーティングを設定した Echo インスタンスを返す
@@ -51,6 +52,12 @@ func New(opts RouterOptions) *echo.Echo {
 	apiGroup.GET("/deployments/:id/ingress-route", opts.DeploymentHandler.GetIngressRoute)        // ingress-route 設定取得エンドポイント
 	apiGroup.POST("/deployments/:id/ingress-route", opts.DeploymentHandler.CreateIngressRoute)    // ingress-route 作成エンドポイント
 	apiGroup.PUT("/deployments/:id/ingress-route", opts.DeploymentHandler.UpdateIngressRoute)     // ingress-route 設定更新エンドポイント
+
+	// env-vars エンドポイントを登録する
+	apiGroup.GET("/projects/:id/env-vars", opts.EnvVarHandler.ListEnvVars)    // env_var 一覧取得エンドポイント
+	apiGroup.POST("/projects/:id/env-vars", opts.EnvVarHandler.CreateEnvVar)  // env_var 作成エンドポイント
+	apiGroup.PUT("/env-vars/:id", opts.EnvVarHandler.UpdateEnvVar)            // env_var 更新エンドポイント
+	apiGroup.DELETE("/env-vars/:id", opts.EnvVarHandler.DeleteEnvVar)         // env_var 削除エンドポイント
 
 	return router
 }
