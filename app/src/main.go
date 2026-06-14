@@ -4,6 +4,7 @@ import (
 	"app/config"
 	"app/handler"
 	"app/k8s"
+	"app/leader"
 	"app/middlewares"
 	"app/repository"
 	"app/router"
@@ -90,8 +91,10 @@ func main() {
 	volumeServiceImpl := service.NewVolumeService(repository.Database, volumeRepo, volumeMountRepo, deploymentRepo, projectRepo)  // volume サービスを生成する
 	volumeHandler := handler.NewVolumeHandler(volumeServiceImpl)                                                                  // volume ハンドラーを生成する
 
-	// Deployment Watcher をバックグラウンドで起動する
-	go k8s.WatchDeployments(context.Background(), k8sClient, deploymentRepo) // k8s Deployment の状態変化を監視してDBを自動更新する
+	// Deployment Watcher をリーダーエレクション経由でバックグラウンドで起動する
+	go leader.RunAsLeader(context.Background(), repository.Database, func(ctx context.Context) { // リーダーになった Pod のみ Watcher を起動する
+		k8s.WatchDeployments(ctx, k8sClient, deploymentRepo) // k8s Deployment の状態変化を監視して DB を自動更新する
+	})
 
 	// ルーターを生成してサーバーを起動する
 	echoRouter := router.New(router.RouterOptions{
