@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -47,6 +48,18 @@ func (mock *mockDeploymentRepository) Updates(ctx context.Context, tx *gorm.DB, 
 		return mock.updatesFunc(ctx, tx, deployment, values)
 	}
 	return nil // デフォルトは nil を返す
+}
+
+func (mock *mockDeploymentRepository) UpdateAppStatus(ctx context.Context, deploymentID string, appStatus models.AppStatus) error {
+	return nil // テストでは使用しないためデフォルト nil を返す
+}
+
+func (mock *mockDeploymentRepository) UpdateK8sStatus(ctx context.Context, deploymentID string, k8sStatus datatypes.JSON) error {
+	return nil // テストでは使用しないためデフォルト nil を返す
+}
+
+func (mock *mockDeploymentRepository) Delete(ctx context.Context, deploymentID string) error {
+	return nil // テストでは使用しないためデフォルト nil を返す
 }
 
 // mockIngressRouteRepository は IngressRouteRepository のテスト用モック実装

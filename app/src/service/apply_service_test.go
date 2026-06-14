@@ -365,6 +365,18 @@ func (mock *applyHistoryMockDeploymentRepository) Updates(ctx context.Context, t
 	return nil
 }
 
+func (mock *applyHistoryMockDeploymentRepository) UpdateAppStatus(ctx context.Context, deploymentID string, appStatus models.AppStatus) error {
+	return nil // テストでは使用しないためデフォルト nil を返す
+}
+
+func (mock *applyHistoryMockDeploymentRepository) UpdateK8sStatus(ctx context.Context, deploymentID string, k8sStatus datatypes.JSON) error {
+	return nil // テストでは使用しないためデフォルト nil を返す
+}
+
+func (mock *applyHistoryMockDeploymentRepository) Delete(ctx context.Context, deploymentID string) error {
+	return nil // テストでは使用しないためデフォルト nil を返す
+}
+
 // applyHistoryMockProjectRepository は Apply テスト専用の ProjectRepository モック
 type applyHistoryMockProjectRepository struct {
 	projectData *models.Project // 返す project データ

@@ -90,6 +90,9 @@ func main() {
 	volumeServiceImpl := service.NewVolumeService(repository.Database, volumeRepo, volumeMountRepo, deploymentRepo, projectRepo)  // volume サービスを生成する
 	volumeHandler := handler.NewVolumeHandler(volumeServiceImpl)                                                                  // volume ハンドラーを生成する
 
+	// Deployment Watcher をバックグラウンドで起動する
+	go k8s.WatchDeployments(context.Background(), k8sClient, deploymentRepo) // k8s Deployment の状態変化を監視してDBを自動更新する
+
 	// ルーターを生成してサーバーを起動する
 	echoRouter := router.New(router.RouterOptions{
 		UserQuotaHandler:  userQuotaHandler,  // quota ハンドラーを注入する

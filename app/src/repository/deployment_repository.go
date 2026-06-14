@@ -4,6 +4,7 @@ import (
 	"app/models"
 	"context"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -15,6 +16,9 @@ type DeploymentRepository interface {
 	FindAllByProjectID(ctx context.Context, projectID string) ([]models.Deployment, error)                        // projectID に紐づく deployment 一覧を取得する
 	Save(ctx context.Context, deployment *models.Deployment) error                                                // deployment を保存する
 	Updates(ctx context.Context, tx *gorm.DB, deployment *models.Deployment, values map[string]interface{}) error // deployment を map で部分更新する
+	UpdateAppStatus(ctx context.Context, deploymentID string, appStatus models.AppStatus) error                   // app_status を更新する
+	UpdateK8sStatus(ctx context.Context, deploymentID string, k8sStatus datatypes.JSON) error                     // k8s_status を更新する
+	Delete(ctx context.Context, deploymentID string) error                                                        // deployment を削除する
 }
 
 // deploymentRepositoryImpl は DeploymentRepository の GORM 実装
@@ -67,6 +71,42 @@ func (repo *deploymentRepositoryImpl) Save(ctx context.Context, deployment *mode
 // Updates は deployment レコードを map の値で部分更新する
 func (repo *deploymentRepositoryImpl) Updates(ctx context.Context, tx *gorm.DB, deployment *models.Deployment, values map[string]interface{}) error {
 	return tx.WithContext(ctx).Model(deployment).Updates(values).Error // tx を使って部分更新する
+}
+
+// UpdateAppStatus は deploymentID に対応する deployment の app_status を更新する
+func (repo *deploymentRepositoryImpl) UpdateAppStatus(ctx context.Context, deploymentID string, appStatus models.AppStatus) error {
+	result := repo.db.WithContext(ctx).Model(&models.Deployment{}).Where("id = ?", deploymentID).Update("app_status", appStatus) // app_status を更新する
+	if result.Error != nil {                                                                                                      // エラーが発生した場合
+		return result.Error // エラーを返す
+	}
+	if result.RowsAffected == 0 { // 更新対象が存在しない場合
+		return gorm.ErrRecordNotFound // レコードなしエラーを返す
+	}
+	return nil // 正常終了
+}
+
+// UpdateK8sStatus は deploymentID に対応する deployment の k8s_status を更新する
+func (repo *deploymentRepositoryImpl) UpdateK8sStatus(ctx context.Context, deploymentID string, k8sStatus datatypes.JSON) error {
+	result := repo.db.WithContext(ctx).Model(&models.Deployment{}).Where("id = ?", deploymentID).Update("k8s_status", k8sStatus) // k8s_status を更新する
+	if result.Error != nil {                                                                                                       // エラーが発生した場合
+		return result.Error // エラーを返す
+	}
+	if result.RowsAffected == 0 { // 更新対象が存在しない場合
+		return gorm.ErrRecordNotFound // レコードなしエラーを返す
+	}
+	return nil // 正常終了
+}
+
+// Delete は deploymentID に対応する deployment を削除する
+func (repo *deploymentRepositoryImpl) Delete(ctx context.Context, deploymentID string) error {
+	result := repo.db.WithContext(ctx).Delete(&models.Deployment{}, "id = ?", deploymentID) // deployment を削除する
+	if result.Error != nil {                                                                  // エラーが発生した場合
+		return result.Error // エラーを返す
+	}
+	if result.RowsAffected == 0 { // 削除対象が存在しない場合
+		return gorm.ErrRecordNotFound // レコードなしエラーを返す
+	}
+	return nil // 正常終了
 }
 
 // ServiceRepository は services テーブルへのアクセスを定義するインターフェース
