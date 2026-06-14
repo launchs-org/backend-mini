@@ -78,6 +78,10 @@ func (mock *mockVolumeMountRepository) FindByDeploymentIDAndMountPath(ctx contex
 	return nil, gorm.ErrRecordNotFound // デフォルトはレコードなしを返す
 }
 
+func (mock *mockVolumeMountRepository) UpdateStatus(ctx context.Context, tx *gorm.DB, mount *models.VolumeMount, status models.VolumeMountStatus) error {
+	return nil // テストでは使用しない
+}
+
 func (mock *mockVolumeMountRepository) Delete(ctx context.Context, tx *gorm.DB, mount *models.VolumeMount) error {
 	if mock.deleteFunc != nil { // モック関数が設定されている場合は呼び出す
 		return mock.deleteFunc(ctx, tx, mount)

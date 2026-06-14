@@ -76,7 +76,7 @@ func main() {
 	envVarMountRepo := repository.NewEnvVarMountRepository(repository.Database)                                            // env_var_mount リポジトリを生成する
 	deploymentServiceImpl := service.NewDeploymentService(deploymentRepo, serviceRepo, projectRepo, ingressRouteRepo)      // deployment サービスを生成する
 	applyHistoryRepo := repository.NewApplyHistoryRepository(repository.Database)                                          // apply_history リポジトリを生成する
-	applyServiceImpl := service.NewApplyService(repository.Database, k8sClient, dynamicClient, deploymentRepo, applyHistoryRepo, projectRepo, serviceRepo, ingressRouteRepo, envVarRepo, envVarMountRepo) // apply サービスを生成する
+	applyServiceImpl := service.NewApplyService(repository.Database, k8sClient, dynamicClient, deploymentRepo, applyHistoryRepo, projectRepo, serviceRepo, ingressRouteRepo, envVarRepo, envVarMountRepo, repository.NewVolumeRepository(repository.Database), repository.NewVolumeMountRepository(repository.Database)) // apply サービスを生成する
 	deploymentHandler := handler.NewDeploymentHandler(deploymentServiceImpl, applyServiceImpl)                             // deployment ハンドラーを生成する
 
 	// env_var ハンドラーを DI 組み立てする

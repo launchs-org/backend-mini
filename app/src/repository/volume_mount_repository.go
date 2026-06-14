@@ -13,6 +13,7 @@ type VolumeMountRepository interface {
 	FindByID(ctx context.Context, mountID string) (*models.VolumeMount, error)                              // ID でマウント設定を取得する
 	FindAllByDeploymentID(ctx context.Context, deploymentID string) ([]*models.VolumeMount, error)          // deploymentID に紐づくマウント設定一覧を取得する
 	FindByDeploymentIDAndMountPath(ctx context.Context, deploymentID string, mountPath string) (*models.VolumeMount, error) // deploymentID と mountPath でマウント設定を取得する（重複チェック用）
+	UpdateStatus(ctx context.Context, tx *gorm.DB, mount *models.VolumeMount, status models.VolumeMountStatus) error // ステータスを更新する
 	Delete(ctx context.Context, tx *gorm.DB, mount *models.VolumeMount) error                               // マウント設定を削除する
 }
 
@@ -56,6 +57,12 @@ func (repo *volumeMountRepositoryImpl) FindByDeploymentIDAndMountPath(ctx contex
 		return nil, err // 取得エラーを返す
 	}
 	return &mountData, nil // マウント設定を返す
+}
+
+// UpdateStatus はマウント設定のステータスを更新する
+func (repo *volumeMountRepositoryImpl) UpdateStatus(ctx context.Context, tx *gorm.DB, mount *models.VolumeMount, status models.VolumeMountStatus) error {
+	mount.Status = status                                                     // ステータスをセットする
+	return tx.WithContext(ctx).Save(mount).Error                              // tx を使って更新する
 }
 
 // Delete はマウント設定レコードを削除する
