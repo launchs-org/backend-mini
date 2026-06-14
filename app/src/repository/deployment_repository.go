@@ -111,9 +111,11 @@ func (repo *deploymentRepositoryImpl) Delete(ctx context.Context, deploymentID s
 
 // ServiceRepository は services テーブルへのアクセスを定義するインターフェース
 type ServiceRepository interface {
-	Create(ctx context.Context, service *models.Service) error                          // service を作成する
-	FindByDeploymentID(ctx context.Context, deploymentID string) (*models.Service, error) // deploymentID に紐づく service を取得する
-	Update(ctx context.Context, service *models.Service) error                          // service を更新する
+	Create(ctx context.Context, service *models.Service) error                                                   // service を作成する
+	FindByDeploymentID(ctx context.Context, deploymentID string) (*models.Service, error)                        // deploymentID に紐づく service を取得する
+	FindByServiceID(ctx context.Context, serviceID string) (*models.Service, error)                              // serviceID に紐づく service を取得する
+	Update(ctx context.Context, service *models.Service) error                                                   // service を更新する
+	UpdateStatus(ctx context.Context, serviceID string, status models.ServiceStatus, k8sStatus datatypes.JSON) error // service の status と k8s_status を更新する
 }
 
 // serviceRepositoryImpl は ServiceRepository の GORM 実装
@@ -140,7 +142,31 @@ func (repo *serviceRepositoryImpl) FindByDeploymentID(ctx context.Context, deplo
 	return &serviceData, nil // service を返す
 }
 
+// FindByServiceID は serviceID に対応する service を返す
+func (repo *serviceRepositoryImpl) FindByServiceID(ctx context.Context, serviceID string) (*models.Service, error) {
+	var serviceData models.Service                                                                                    // service を格納する変数を定義する
+	if err := repo.db.WithContext(ctx).First(&serviceData, "id = ?", serviceID).Error; err != nil { // db から service を取得する
+		return nil, err // 取得エラーを返す
+	}
+	return &serviceData, nil // service を返す
+}
+
 // Update は service レコードを保存する
 func (repo *serviceRepositoryImpl) Update(ctx context.Context, service *models.Service) error {
 	return repo.db.WithContext(ctx).Save(service).Error // db を使って保存する
+}
+
+// UpdateStatus は serviceID に対応する service の status と k8s_status を更新する
+func (repo *serviceRepositoryImpl) UpdateStatus(ctx context.Context, serviceID string, status models.ServiceStatus, k8sStatus datatypes.JSON) error {
+	result := repo.db.WithContext(ctx).Model(&models.Service{}).Where("id = ?", serviceID).Updates(map[string]interface{}{ // status と k8s_status を更新する
+		"status":     status,
+		"k8s_status": k8sStatus,
+	})
+	if result.Error != nil { // エラーが発生した場合
+		return result.Error // エラーを返す
+	}
+	if result.RowsAffected == 0 { // 更新対象が存在しない場合
+		return gorm.ErrRecordNotFound // レコードなしエラーを返す
+	}
+	return nil // 正常終了
 }

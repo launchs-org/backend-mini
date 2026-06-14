@@ -65,8 +65,10 @@ func (mock *mockDeploymentRepository) Delete(ctx context.Context, deploymentID s
 // mockIngressRouteRepository は IngressRouteRepository のテスト用モック実装
 type mockIngressRouteRepository struct {
 	createFunc              func(ctx context.Context, ingressRoute *models.IngressRoute) error
+	findByIDFunc            func(ctx context.Context, ingressRouteID string) (*models.IngressRoute, error)
 	findByDeploymentIDFunc  func(ctx context.Context, deploymentID string) (*models.IngressRoute, error)
 	updateFunc              func(ctx context.Context, ingressRoute *models.IngressRoute) error
+	updateStatusFunc        func(ctx context.Context, ingressRouteID string, status models.IngressRouteStatus, k8sStatus datatypes.JSON) error
 }
 
 func (mock *mockIngressRouteRepository) Create(ctx context.Context, ingressRoute *models.IngressRoute) error {
@@ -74,6 +76,13 @@ func (mock *mockIngressRouteRepository) Create(ctx context.Context, ingressRoute
 		return mock.createFunc(ctx, ingressRoute)
 	}
 	return nil // デフォルトは nil を返す
+}
+
+func (mock *mockIngressRouteRepository) FindByID(ctx context.Context, ingressRouteID string) (*models.IngressRoute, error) {
+	if mock.findByIDFunc != nil { // モック関数が設定されている場合は呼び出す
+		return mock.findByIDFunc(ctx, ingressRouteID)
+	}
+	return &models.IngressRoute{ID: ingressRouteID}, nil // デフォルトは空の ingress_route を返す
 }
 
 func (mock *mockIngressRouteRepository) FindByDeploymentID(ctx context.Context, deploymentID string) (*models.IngressRoute, error) {
@@ -90,11 +99,20 @@ func (mock *mockIngressRouteRepository) Update(ctx context.Context, ingressRoute
 	return nil // デフォルトは nil を返す
 }
 
+func (mock *mockIngressRouteRepository) UpdateStatus(ctx context.Context, ingressRouteID string, status models.IngressRouteStatus, k8sStatus datatypes.JSON) error {
+	if mock.updateStatusFunc != nil { // モック関数が設定されている場合は呼び出す
+		return mock.updateStatusFunc(ctx, ingressRouteID, status, k8sStatus)
+	}
+	return nil // デフォルトは nil を返す
+}
+
 // mockServiceRepository は ServiceRepository のテスト用モック実装
 type mockServiceRepository struct {
 	createFunc              func(ctx context.Context, service *models.Service) error
 	findByDeploymentIDFunc  func(ctx context.Context, deploymentID string) (*models.Service, error)
+	findByServiceIDFunc     func(ctx context.Context, serviceID string) (*models.Service, error)
 	updateFunc              func(ctx context.Context, service *models.Service) error
+	updateStatusFunc        func(ctx context.Context, serviceID string, status models.ServiceStatus, k8sStatus datatypes.JSON) error
 }
 
 func (mock *mockServiceRepository) Create(ctx context.Context, service *models.Service) error {
@@ -108,9 +126,23 @@ func (mock *mockServiceRepository) FindByDeploymentID(ctx context.Context, deplo
 	return &models.Service{DeploymentID: deploymentID}, nil // デフォルトは空の service を返す
 }
 
+func (mock *mockServiceRepository) FindByServiceID(ctx context.Context, serviceID string) (*models.Service, error) {
+	if mock.findByServiceIDFunc != nil { // モック関数が設定されている場合は呼び出す
+		return mock.findByServiceIDFunc(ctx, serviceID)
+	}
+	return &models.Service{ID: serviceID}, nil // デフォルトは空の service を返す
+}
+
 func (mock *mockServiceRepository) Update(ctx context.Context, service *models.Service) error {
 	if mock.updateFunc != nil { // モック関数が設定されている場合は呼び出す
 		return mock.updateFunc(ctx, service)
+	}
+	return nil // デフォルトは nil を返す
+}
+
+func (mock *mockServiceRepository) UpdateStatus(ctx context.Context, serviceID string, status models.ServiceStatus, k8sStatus datatypes.JSON) error {
+	if mock.updateStatusFunc != nil { // モック関数が設定されている場合は呼び出す
+		return mock.updateStatusFunc(ctx, serviceID, status, k8sStatus)
 	}
 	return nil // デフォルトは nil を返す
 }
