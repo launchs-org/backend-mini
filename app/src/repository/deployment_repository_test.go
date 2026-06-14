@@ -251,3 +251,97 @@ func TestServiceRepository_Create_正常に作成される(t *testing.T) {
 		t.Errorf("期待する status: pending, 実際の status: %s", fetched.Status)
 	}
 }
+
+// TestServiceRepository_FindByDeploymentID_正常に取得される は FindByDeploymentID で Service が取得されることを確認する
+func TestServiceRepository_FindByDeploymentID_正常に取得される(t *testing.T) {
+	db := setupTestDB(t)                     // テスト用 DB を準備する
+	projectData := createTestProject(t, db) // テスト用 Project を作成する
+
+	// テスト用 Deployment を作成する
+	deploymentData := &models.Deployment{
+		ProjectID: projectData.ID,
+		Name:      "test-app",
+		Type:      models.DeploymentTypeImageURL,
+		Status:    models.DeploymentStatusPending,
+		AppStatus: models.AppStatusPending,
+	}
+	db.Create(deploymentData)                                          // テスト用レコードを作成する
+	t.Cleanup(func() { db.Unscoped().Delete(deploymentData) }) // テスト終了後にレコードを削除する
+
+	// テスト用 Service を作成する
+	serviceData := &models.Service{
+		DeploymentID: deploymentData.ID,           // デプロイメント ID を設定する
+		Port:         8080,                        // ポート番号を設定する
+		TargetPort:   3000,                        // ターゲットポートを設定する
+		Status:       models.ServiceStatusPending, // ステータスを設定する
+	}
+	db.Create(serviceData)                                          // テスト用レコードを作成する
+	t.Cleanup(func() { db.Unscoped().Delete(serviceData) }) // テスト終了後にレコードを削除する
+
+	repo := NewServiceRepository(db)                                                                          // リポジトリを生成する
+	result, err := repo.FindByDeploymentID(context.Background(), deploymentData.ID) // リポジトリを実行する
+	if err != nil {
+		t.Fatalf("FindByDeploymentID がエラーを返しました: %v", err)
+	}
+	if result.DeploymentID != deploymentData.ID { // deployment_id が一致することを確認する
+		t.Errorf("期待する deployment_id: %s, 実際の deployment_id: %s", deploymentData.ID, result.DeploymentID)
+	}
+	if result.Port != 8080 { // ポート番号が一致することを確認する
+		t.Errorf("期待する port: 8080, 実際の port: %d", result.Port)
+	}
+}
+
+// TestServiceRepository_FindByDeploymentID_存在しないIDはエラーを返す は存在しない ID でエラーが返ることを確認する
+func TestServiceRepository_FindByDeploymentID_存在しないIDはエラーを返す(t *testing.T) {
+	db := setupTestDB(t)                // テスト用 DB を準備する
+	repo := NewServiceRepository(db)   // リポジトリを生成する
+
+	_, err := repo.FindByDeploymentID(context.Background(), "00000000-0000-0000-0000-000000000000") // 存在しない ID で検索する
+	if err == nil { // エラーが返ることを確認する
+		t.Fatal("存在しない deployment_id でエラーが返るべきですが nil が返りました")
+	}
+}
+
+// TestServiceRepository_Update_正常に更新される は Update で Service が更新されることを確認する
+func TestServiceRepository_Update_正常に更新される(t *testing.T) {
+	db := setupTestDB(t)                     // テスト用 DB を準備する
+	projectData := createTestProject(t, db) // テスト用 Project を作成する
+
+	// テスト用 Deployment を作成する
+	deploymentData := &models.Deployment{
+		ProjectID: projectData.ID,
+		Name:      "test-app",
+		Type:      models.DeploymentTypeImageURL,
+		Status:    models.DeploymentStatusPending,
+		AppStatus: models.AppStatusPending,
+	}
+	db.Create(deploymentData)                                          // テスト用レコードを作成する
+	t.Cleanup(func() { db.Unscoped().Delete(deploymentData) }) // テスト終了後にレコードを削除する
+
+	// テスト用 Service を作成する
+	serviceData := &models.Service{
+		DeploymentID:      deploymentData.ID,           // デプロイメント ID を設定する
+		PendingPort:       8080,                        // 更新前の pending port を設定する
+		PendingTargetPort: 3000,                        // 更新前の pending target port を設定する
+		Status:            models.ServiceStatusPending, // ステータスを設定する
+	}
+	db.Create(serviceData)                                          // テスト用レコードを作成する
+	t.Cleanup(func() { db.Unscoped().Delete(serviceData) }) // テスト終了後にレコードを削除する
+
+	repo := NewServiceRepository(db)   // リポジトリを生成する
+	serviceData.PendingPort = 9090    // pending_port を更新する
+	err := repo.Update(context.Background(), serviceData) // リポジトリを実行する
+	if err != nil {
+		t.Fatalf("Update がエラーを返しました: %v", err)
+	}
+
+	// DB から取得して更新を確認する
+	var fetched models.Service
+	db.First(&fetched, "id = ?", serviceData.ID) // 更新後のレコードを取得する
+	if fetched.PendingPort != 9090 {              // pending_port が更新されていることを確認する
+		t.Errorf("期待する pending_port: 9090, 実際の pending_port: %d", fetched.PendingPort)
+	}
+	if fetched.PendingTargetPort != 3000 { // pending_target_port が変化していないことを確認する
+		t.Errorf("pending_target_port は変化しないはずですが変化しています: %d", fetched.PendingTargetPort)
+	}
+}

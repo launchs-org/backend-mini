@@ -11,11 +11,16 @@ import (
 
 // DeploymentService は Deployment CRUD のビジネスロジックを定義するインターフェース
 type DeploymentService interface {
-	ListDeployments(ctx context.Context, projectID string) ([]models.Deployment, error)                                                  // deployment 一覧を取得する
-	CreateDeployment(ctx context.Context, req CreateDeploymentRequest) (*models.Deployment, error)                                       // deployment を作成する
-	GetDeployment(ctx context.Context, userID string, deploymentID string) (*models.Deployment, error)                                   // deployment を取得する
-	UpdateDeployment(ctx context.Context, userID string, deploymentID string, req UpdateDeploymentRequest) (*models.Deployment, error)   // deployment を更新する
-	DeleteDeployment(ctx context.Context, userID string, deploymentID string) (*models.Deployment, error)                                // deployment を削除（deleting 状態に変更）する
+	ListDeployments(ctx context.Context, projectID string) ([]models.Deployment, error)                                                         // deployment 一覧を取得する
+	CreateDeployment(ctx context.Context, req CreateDeploymentRequest) (*models.Deployment, error)                                              // deployment を作成する
+	GetDeployment(ctx context.Context, userID string, deploymentID string) (*models.Deployment, error)                                          // deployment を取得する
+	UpdateDeployment(ctx context.Context, userID string, deploymentID string, req UpdateDeploymentRequest) (*models.Deployment, error)          // deployment を更新する
+	DeleteDeployment(ctx context.Context, userID string, deploymentID string) (*models.Deployment, error)                                       // deployment を削除（deleting 状態に変更）する
+	GetService(ctx context.Context, userID string, deploymentID string) (*models.Service, error)                                                // service 設定を取得する
+	UpdateService(ctx context.Context, userID string, deploymentID string, req UpdateServiceRequest) (*models.Service, error)                   // service の pending フィールドを更新する
+	GetIngressRoute(ctx context.Context, userID string, deploymentID string) (*models.IngressRoute, error)                                      // ingress_route 設定を取得する
+	CreateIngressRoute(ctx context.Context, userID string, deploymentID string, req CreateIngressRouteRequest) (*models.IngressRoute, error)    // ingress_route を作成する
+	UpdateIngressRoute(ctx context.Context, userID string, deploymentID string, req UpdateIngressRouteRequest) (*models.IngressRoute, error)    // ingress_route の pending フィールドを更新する
 }
 
 // CreateDeploymentRequest は POST /projects/:id/deployments のリクエスト構造体
@@ -31,6 +36,29 @@ type CreateDeploymentRequest struct {
 	DockerfilePath      string   `json:"dockerfile_path"`   // Dockerfile パス
 	InstanceSize        string   `json:"instance_size"`     // インスタンスサイズ
 	Replicas            int32    `json:"replicas"`          // レプリカ数
+}
+
+// UpdateServiceRequest は PUT /deployments/:id/service のリクエスト構造体
+type UpdateServiceRequest struct {
+	Port       *int `json:"port"`        // nil の場合は更新しない
+	TargetPort *int `json:"target_port"` // nil の場合は更新しない
+}
+
+// CreateIngressRouteRequest は POST /deployments/:id/ingress-route のリクエスト構造体
+type CreateIngressRouteRequest struct {
+	Host                string `json:"host"`                 // ホスト名
+	PathPrefix          string `json:"path_prefix"`          // パスプレフィックス
+	Port                int    `json:"port"`                 // 転送先ポート番号
+	TLSEnabled          bool   `json:"tls_enabled"`          // TLS 有効化フラグ
+	CertificateResolver string `json:"certificate_resolver"` // 証明書リゾルバー名
+}
+
+// UpdateIngressRouteRequest は PUT /deployments/:id/ingress-route のリクエスト構造体
+type UpdateIngressRouteRequest struct {
+	PathPrefix          *string `json:"path_prefix"`          // nil の場合は更新しない
+	Port                *int    `json:"port"`                 // nil の場合は更新しない
+	TLSEnabled          *bool   `json:"tls_enabled"`          // nil の場合は更新しない
+	CertificateResolver *string `json:"certificate_resolver"` // nil の場合は更新しない
 }
 
 // UpdateDeploymentRequest は PUT /deployments/:id のリクエスト構造体
@@ -49,17 +77,19 @@ type UpdateDeploymentRequest struct {
 
 // deploymentServiceImpl は DeploymentService の実装
 type deploymentServiceImpl struct {
-	deploymentRepo repository.DeploymentRepository // deployment リポジトリ
-	serviceRepo    repository.ServiceRepository    // service リポジトリ
-	projectRepo    repository.ProjectRepository    // project リポジトリ（所有権チェック用）
+	deploymentRepo   repository.DeploymentRepository   // deployment リポジトリ
+	serviceRepo      repository.ServiceRepository      // service リポジトリ
+	projectRepo      repository.ProjectRepository      // project リポジトリ（所有権チェック用）
+	ingressRouteRepo repository.IngressRouteRepository // ingress_route リポジトリ
 }
 
 // NewDeploymentService は DeploymentService の実装を返す
-func NewDeploymentService(deploymentRepo repository.DeploymentRepository, serviceRepo repository.ServiceRepository, projectRepo repository.ProjectRepository) DeploymentService {
+func NewDeploymentService(deploymentRepo repository.DeploymentRepository, serviceRepo repository.ServiceRepository, projectRepo repository.ProjectRepository, ingressRouteRepo repository.IngressRouteRepository) DeploymentService {
 	return &deploymentServiceImpl{
-		deploymentRepo: deploymentRepo, // deployment リポジトリを注入する
-		serviceRepo:    serviceRepo,    // service リポジトリを注入する
-		projectRepo:    projectRepo,    // project リポジトリを注入する
+		deploymentRepo:   deploymentRepo,   // deployment リポジトリを注入する
+		serviceRepo:      serviceRepo,      // service リポジトリを注入する
+		projectRepo:      projectRepo,      // project リポジトリを注入する
+		ingressRouteRepo: ingressRouteRepo, // ingress_route リポジトリを注入する
 	}
 }
 
@@ -193,6 +223,110 @@ func (svc *deploymentServiceImpl) DeleteDeployment(ctx context.Context, userID s
 		return nil, err // 保存エラーを返す
 	}
 	return deploymentData, nil // 更新後の deployment を返す
+}
+
+// GetService は deploymentID に紐づく service 設定を返す
+func (svc *deploymentServiceImpl) GetService(ctx context.Context, userID string, deploymentID string) (*models.Service, error) {
+	deploymentData, err := svc.deploymentRepo.FindByID(ctx, deploymentID) // deployment を取得して所有権チェック用に使う
+	if err != nil {
+		return nil, err // 取得エラーを返す
+	}
+	if err := svc.checkOwnership(ctx, userID, deploymentData.ProjectID); err != nil { // 所有権を確認する
+		return nil, err
+	}
+	return svc.serviceRepo.FindByDeploymentID(ctx, deploymentID) // リポジトリ経由で service を取得する
+}
+
+// UpdateService は送られてきたフィールドのみ pending_* を更新する
+func (svc *deploymentServiceImpl) UpdateService(ctx context.Context, userID string, deploymentID string, req UpdateServiceRequest) (*models.Service, error) {
+	deploymentData, err := svc.deploymentRepo.FindByID(ctx, deploymentID) // deployment を取得して所有権チェック用に使う
+	if err != nil {
+		return nil, err // 取得エラーを返す
+	}
+	if err := svc.checkOwnership(ctx, userID, deploymentData.ProjectID); err != nil { // 所有権を確認する
+		return nil, err
+	}
+	serviceData, err := svc.serviceRepo.FindByDeploymentID(ctx, deploymentID) // リポジトリ経由で service を取得する
+	if err != nil {
+		return nil, err // 取得エラーを返す
+	}
+	if req.Port != nil {
+		serviceData.PendingPort = *req.Port // pending_port を更新する
+	}
+	if req.TargetPort != nil {
+		serviceData.PendingTargetPort = *req.TargetPort // pending_target_port を更新する
+	}
+	if err := svc.serviceRepo.Update(ctx, serviceData); err != nil { // リポジトリ経由で保存する
+		return nil, err // 保存エラーを返す
+	}
+	return serviceData, nil // 更新後の service を返す
+}
+
+// GetIngressRoute は deploymentID に紐づく ingress_route 設定を返す
+func (svc *deploymentServiceImpl) GetIngressRoute(ctx context.Context, userID string, deploymentID string) (*models.IngressRoute, error) {
+	deploymentData, err := svc.deploymentRepo.FindByID(ctx, deploymentID) // deployment を取得して所有権チェック用に使う
+	if err != nil {
+		return nil, err // 取得エラーを返す
+	}
+	if err := svc.checkOwnership(ctx, userID, deploymentData.ProjectID); err != nil { // 所有権を確認する
+		return nil, err
+	}
+	return svc.ingressRouteRepo.FindByDeploymentID(ctx, deploymentID) // リポジトリ経由で ingress_route を取得する
+}
+
+// CreateIngressRoute は deploymentID に紐づく ingress_route を作成する
+func (svc *deploymentServiceImpl) CreateIngressRoute(ctx context.Context, userID string, deploymentID string, req CreateIngressRouteRequest) (*models.IngressRoute, error) {
+	deploymentData, err := svc.deploymentRepo.FindByID(ctx, deploymentID) // deployment を取得して所有権チェック用に使う
+	if err != nil {
+		return nil, err // 取得エラーを返す
+	}
+	if err := svc.checkOwnership(ctx, userID, deploymentData.ProjectID); err != nil { // 所有権を確認する
+		return nil, err
+	}
+	ingressRouteData := &models.IngressRoute{
+		DeploymentID:        deploymentID,           // deployment ID を設定する
+		Host:                req.Host,               // ホスト名を設定する
+		PathPrefix:          req.PathPrefix,         // パスプレフィックスを設定する
+		Port:                req.Port,               // ポート番号を設定する
+		TLSEnabled:          req.TLSEnabled,         // TLS 有効化フラグを設定する
+		CertificateResolver: req.CertificateResolver, // 証明書リゾルバーを設定する
+		Status:              models.IngressRouteStatusPending, // 初期ステータスを設定する
+	}
+	if err := svc.ingressRouteRepo.Create(ctx, ingressRouteData); err != nil { // リポジトリ経由で作成する
+		return nil, err // 作成エラーを返す
+	}
+	return ingressRouteData, nil // 作成した ingress_route を返す
+}
+
+// UpdateIngressRoute は送られてきたフィールドのみ pending_* を更新する
+func (svc *deploymentServiceImpl) UpdateIngressRoute(ctx context.Context, userID string, deploymentID string, req UpdateIngressRouteRequest) (*models.IngressRoute, error) {
+	deploymentData, err := svc.deploymentRepo.FindByID(ctx, deploymentID) // deployment を取得して所有権チェック用に使う
+	if err != nil {
+		return nil, err // 取得エラーを返す
+	}
+	if err := svc.checkOwnership(ctx, userID, deploymentData.ProjectID); err != nil { // 所有権を確認する
+		return nil, err
+	}
+	ingressRouteData, err := svc.ingressRouteRepo.FindByDeploymentID(ctx, deploymentID) // リポジトリ経由で ingress_route を取得する
+	if err != nil {
+		return nil, err // 取得エラーを返す
+	}
+	if req.PathPrefix != nil {
+		ingressRouteData.PendingPathPrefix = *req.PathPrefix // pending_path_prefix を更新する
+	}
+	if req.Port != nil {
+		ingressRouteData.PendingPort = *req.Port // pending_port を更新する
+	}
+	if req.TLSEnabled != nil {
+		ingressRouteData.PendingTLSEnabled = req.TLSEnabled // pending_tls_enabled を更新する
+	}
+	if req.CertificateResolver != nil {
+		ingressRouteData.PendingCertificateResolver = *req.CertificateResolver // pending_certificate_resolver を更新する
+	}
+	if err := svc.ingressRouteRepo.Update(ctx, ingressRouteData); err != nil { // リポジトリ経由で保存する
+		return nil, err // 保存エラーを返す
+	}
+	return ingressRouteData, nil // 更新後の ingress_route を返す
 }
 
 // ErrDeploymentNotFound は deployment が見つからない場合のエラー

@@ -1,0 +1,44 @@
+package repository
+
+import (
+	"app/models"
+	"context"
+
+	"gorm.io/gorm"
+)
+
+// IngressRouteRepository は ingress_routes テーブルへのアクセスを定義するインターフェース
+type IngressRouteRepository interface {
+	Create(ctx context.Context, ingressRoute *models.IngressRoute) error                              // ingress_route を作成する
+	FindByDeploymentID(ctx context.Context, deploymentID string) (*models.IngressRoute, error)        // deploymentID に紐づく ingress_route を取得する
+	Update(ctx context.Context, ingressRoute *models.IngressRoute) error                              // ingress_route を更新する
+}
+
+// ingressRouteRepositoryImpl は IngressRouteRepository の GORM 実装
+type ingressRouteRepositoryImpl struct {
+	db *gorm.DB // データベース接続
+}
+
+// NewIngressRouteRepository は IngressRouteRepository の実装を返す
+func NewIngressRouteRepository(db *gorm.DB) IngressRouteRepository {
+	return &ingressRouteRepositoryImpl{db: db} // 実装を生成して返す
+}
+
+// Create は ingress_route レコードを作成する
+func (repo *ingressRouteRepositoryImpl) Create(ctx context.Context, ingressRoute *models.IngressRoute) error {
+	return repo.db.WithContext(ctx).Create(ingressRoute).Error // db を使って作成する
+}
+
+// FindByDeploymentID は deploymentID に対応する ingress_route を返す
+func (repo *ingressRouteRepositoryImpl) FindByDeploymentID(ctx context.Context, deploymentID string) (*models.IngressRoute, error) {
+	var ingressRouteData models.IngressRoute                                                                                              // ingress_route を格納する変数を定義する
+	if err := repo.db.WithContext(ctx).First(&ingressRouteData, "deployment_id = ?", deploymentID).Error; err != nil { // db から ingress_route を取得する
+		return nil, err // 取得エラーを返す
+	}
+	return &ingressRouteData, nil // ingress_route を返す
+}
+
+// Update は ingress_route レコードを保存する
+func (repo *ingressRouteRepositoryImpl) Update(ctx context.Context, ingressRoute *models.IngressRoute) error {
+	return repo.db.WithContext(ctx).Save(ingressRoute).Error // db を使って保存する
+}

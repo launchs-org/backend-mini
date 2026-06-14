@@ -49,7 +49,6 @@ func main() {
 	}
 	log.Printf("k8s に接続しました: %d 個の namespace が見つかりました", len(namespaceList.Items)) // 接続確認ログを出す
 
-	_ = dynamicClient // 将来のハンドラ初期化まで未使用警告を抑制する
 
 	// quota ハンドラーを DI 組み立てする
 	userQuotaRepo := repository.NewUserQuotaRepository(repository.Database) // quota リポジトリを生成する
@@ -70,11 +69,12 @@ func main() {
 	projectHandler := handler.NewProjectHandler(projectServiceImpl)                                              // project ハンドラーを生成する
 
 	// deployment ハンドラーを DI 組み立てする
-	deploymentRepo := repository.NewDeploymentRepository(repository.Database)                     // deployment リポジトリを生成する
-	serviceRepo := repository.NewServiceRepository(repository.Database)                           // service リポジトリを生成する
-	deploymentServiceImpl := service.NewDeploymentService(deploymentRepo, serviceRepo, projectRepo) // deployment サービスを生成する
+	deploymentRepo := repository.NewDeploymentRepository(repository.Database)                                              // deployment リポジトリを生成する
+	serviceRepo := repository.NewServiceRepository(repository.Database)                                                    // service リポジトリを生成する
+	ingressRouteRepo := repository.NewIngressRouteRepository(repository.Database)                                          // ingress_route リポジトリを生成する
+	deploymentServiceImpl := service.NewDeploymentService(deploymentRepo, serviceRepo, projectRepo, ingressRouteRepo)      // deployment サービスを生成する
 	applyHistoryRepo := repository.NewApplyHistoryRepository(repository.Database)                 // apply_history リポジトリを生成する
-	applyServiceImpl := service.NewApplyService(repository.Database, k8sClient, deploymentRepo, applyHistoryRepo, projectRepo) // apply サービスを生成する
+	applyServiceImpl := service.NewApplyService(repository.Database, k8sClient, dynamicClient, deploymentRepo, applyHistoryRepo, projectRepo, serviceRepo, ingressRouteRepo) // apply サービスを生成する
 	deploymentHandler := handler.NewDeploymentHandler(deploymentServiceImpl, applyServiceImpl)    // deployment ハンドラーを生成する
 
 	// ルーターを生成してサーバーを起動する

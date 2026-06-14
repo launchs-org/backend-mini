@@ -7,6 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // Generator は manifest 生成に必要な設定を保持する構造体
@@ -68,6 +69,50 @@ func (generator *Generator) GenerateDeployment(
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{container}, // コンテナを設定する
+				},
+			},
+		},
+	}
+}
+
+// GenerateService は DB の Service モデルから k8s Service manifest を生成する
+func (generator *Generator) GenerateService(
+	serviceData models.Service,
+	deploymentName string,
+	namespace string,
+) *corev1.Service {
+	port := serviceData.PendingPort // pending_port を使う
+	if port == 0 {                  // pending が 0 の場合は current 値を使う
+		port = serviceData.Port
+	}
+	targetPort := serviceData.PendingTargetPort // pending_target_port を使う
+	if targetPort == 0 {                        // pending が 0 の場合は current 値を使う
+		targetPort = serviceData.TargetPort
+	}
+	serviceType := corev1.ServiceType(serviceData.Type) // Service タイプを設定する
+	if serviceType == "" {                              // 未設定の場合はデフォルトを ClusterIP にする
+		serviceType = corev1.ServiceTypeClusterIP
+	}
+
+	return &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      deploymentName + "-svc", // Service 名をデプロイメント名から生成する
+			Namespace: namespace,               // namespace を設定する
+			Labels: map[string]string{
+				"launchs.org/service-id": serviceData.ID, // サービス ID ラベルを設定する
+				"app":                    deploymentName,  // アプリ名ラベルを設定する
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Type: serviceType, // Service タイプを設定する
+			Selector: map[string]string{
+				"app": deploymentName, // Pod セレクターを設定する
+			},
+			Ports: []corev1.ServicePort{
+				{
+					Port:       int32(port),                    // 公開ポートを設定する
+					TargetPort: intstr.FromInt32(int32(targetPort)), // ターゲットポートを設定する
+					Protocol:   corev1.ProtocolTCP,             // プロトコルを TCP に設定する
 				},
 			},
 		},
