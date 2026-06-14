@@ -47,6 +47,28 @@ func (generator *Generator) GenerateDeployment(
 		container.Args = deploymentData.Args
 	}
 
+	// envMounts が存在する場合は ConfigMap/Secret の envFrom を設定する
+	if len(envMounts) > 0 { // envMounts が存在する場合のみ envFrom を設定する
+		container.EnvFrom = []corev1.EnvFromSource{
+			{
+				ConfigMapRef: &corev1.ConfigMapEnvSource{ // ConfigMap を envFrom に追加する
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: deploymentData.Name + "-env", // ConfigMap 名を命名規則に従って設定する
+					},
+					Optional: boolPtr(true), // ConfigMap が存在しない場合もエラーにしない
+				},
+			},
+			{
+				SecretRef: &corev1.SecretEnvSource{ // Secret を envFrom に追加する
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: deploymentData.Name + "-secret", // Secret 名を命名規則に従って設定する
+					},
+					Optional: boolPtr(true), // Secret が存在しない場合もエラーにしない
+				},
+			},
+		}
+	}
+
 	replicas := deploymentData.Replicas // レプリカ数を取得する
 
 	return &appsv1.Deployment{
@@ -73,6 +95,11 @@ func (generator *Generator) GenerateDeployment(
 			},
 		},
 	}
+}
+
+// boolPtr は bool 値のポインタを返すヘルパー関数
+func boolPtr(boolValue bool) *bool {
+	return &boolValue
 }
 
 // GenerateService は DB の Service モデルから k8s Service manifest を生成する
