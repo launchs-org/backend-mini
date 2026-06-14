@@ -179,7 +179,15 @@ func (mock *mockProjectRepository) Save(ctx context.Context, project *models.Pro
 	return nil // 使用しない
 }
 
+func (mock *mockProjectRepository) FindByNamespace(ctx context.Context, namespace string) (*models.Project, error) {
+	return nil, nil // 使用しない
+}
+
 func (mock *mockProjectRepository) Delete(ctx context.Context, tx *gorm.DB, project *models.Project) error {
+	return nil // 使用しない
+}
+
+func (mock *mockProjectRepository) DeleteNoTx(ctx context.Context, project *models.Project) error {
 	return nil // 使用しない
 }
 

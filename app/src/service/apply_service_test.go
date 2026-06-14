@@ -406,7 +406,15 @@ func (mock *applyHistoryMockProjectRepository) Save(ctx context.Context, project
 	return nil // 使用しない
 }
 
+func (mock *applyHistoryMockProjectRepository) FindByNamespace(ctx context.Context, namespace string) (*models.Project, error) {
+	return nil, nil // 使用しない
+}
+
 func (mock *applyHistoryMockProjectRepository) Delete(ctx context.Context, tx *gorm.DB, project *models.Project) error {
+	return nil // 使用しない
+}
+
+func (mock *applyHistoryMockProjectRepository) DeleteNoTx(ctx context.Context, project *models.Project) error {
 	return nil // 使用しない
 }
 

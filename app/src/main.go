@@ -95,7 +95,8 @@ func main() {
 	go leader.RunAsLeader(context.Background(), repository.Database, func(ctx context.Context) { // リーダーになった Pod のみ Watcher を起動する
 		go k8s.WatchServices(ctx, k8sClient, serviceRepo)                               // k8s Service の状態変化を監視して DB を自動更新する
 		go k8s.WatchIngressRoutes(ctx, dynamicClient, ingressRouteRepo)                 // Traefik IngressRoute の状態変化を監視して DB を自動更新する
-		go k8s.WatchPVCs(ctx, k8sClient, volumeRepo) // PVC の Bound 状態を監視して DB を自動更新する
+		go k8s.WatchPVCs(ctx, k8sClient, volumeRepo)                                    // PVC の Bound 状態を監視して DB を自動更新する
+		go k8s.WatchNamespaces(ctx, k8sClient, projectRepo)                             // Namespace の削除イベントを監視して DB の Project レコードを削除する
 		k8s.WatchDeployments(ctx, k8sClient, deploymentRepo)                            // k8s Deployment の状態変化を監視して DB を自動更新する
 	})
 
